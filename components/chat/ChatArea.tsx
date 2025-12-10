@@ -1,60 +1,63 @@
+import { useChat } from "@ai-sdk/react";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
-import {
-  MessageRole,
-  getAiReply,
-  type Message,
-  type Conversation,
-} from "./chat";
-import { useState } from "react";
+import { MessageRole, type Message, type Conversation } from "./chat";
 
 interface ChatAreaProps {
   conversation: Conversation | undefined;
-  onSendMessage: (message: Message) => void;
+  onConversationActivity?: (id: string) => void;
 }
 
-export const ChatArea = ({ conversation, onSendMessage }: ChatAreaProps) => {
-  // 获取当前消息列表，如果没有则为空数组
-  const messages = conversation?.messages || [];
-  // 是否正在输入
-  const [isTyping, setIsTyping] = useState(false);
+export const ChatArea = ({
+  conversation,
+  onConversationActivity,
+}: ChatAreaProps) => {
+  const { messages: uiMessages, sendMessage } = useChat({
+    id: conversation?.id ?? "default",
+  });
 
-  const handleSend = async (content: string) => {
-    // 1. 组装用户消息
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: MessageRole.USER,
-      content: content,
-      timestamp: Date.now(),
-    };
+  const mappedMessages: Message[] = uiMessages
+    .filter(
+      (message) => message.role === "user" || message.role === "assistant"
+    )
+    .map((message) => {
+      const text = message.parts
+        .map((part) => {
+          if (part.type === "text") {
+            return part.text;
+          }
+        })
+        .join("\n");
 
-    // 2. 向上汇报
-    onSendMessage(userMessage);
+      return {
+        id: message.id,
+        role:
+          message.role === "user" ? MessageRole.USER : MessageRole.ASSISTANT,
+        content: text,
+        timestamp: 0,
+      };
+    });
 
-    // 3. 模拟 AI 回复
-    setIsTyping(true);
-    try {
-      const aiMessage = await getAiReply(content);
-      onSendMessage(aiMessage);
-    } finally {
-      setIsTyping(false);
-    }
+  const handleSend = (content: string) => {
+    if (!conversation) return;
+    onConversationActivity?.(conversation.id);
+    sendMessage({ text: content });
   };
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* 1. 消息列表区域 */}
-      <MessageList messages={messages} isTyping={isTyping} />
-
-      {/* 2. 底部输入框区域 */}
-      {conversation ? (
-        <MessageInput onSend={handleSend} />
-      ) : (
-        // TODO optimize: 优化空状态的显示
+  if (!conversation) {
+    return (
+      <div className="flex flex-col h-full">
         <div className="p-4 text-center text-gray-500">
           请选择或新建一个对话
         </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <MessageList messages={mappedMessages} isTyping={false} />
+      <MessageInput onSend={handleSend} />
     </div>
   );
 };

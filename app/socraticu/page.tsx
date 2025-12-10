@@ -7,25 +7,12 @@ import Layout from "../../components/layout/Layout";
 import { useState } from "react";
 import {
   type Conversation,
-  type Message,
 } from "../../components/chat/chat";
 
 export default function SocraticUPage() {
-  const defaultConversations: Conversation[] = [
-    {
-      id: "1",
-      title: "Long Conversation Test",
-      messages: [],
-      createdAt: 1733333333333,
-      updatedAt: 1733333333334,
-    },
-  ];
 
-  const [conversations, setConversations] =
-    useState<Conversation[]>(defaultConversations);
-  const [activeConversationId, setActiveConversationId] = useState<string>(
-    defaultConversations[0].id
-  );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string>('');
   // 控制侧边栏是否打开
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -42,19 +29,13 @@ export default function SocraticUPage() {
     setActiveConversationId(newConversation.id);
   };
 
-  // 处理发送消息
-  const handleSendMessage = (message: Message) => {
+  const handleConversationActivity = (id: string) => {
     setConversations((prev) =>
-      prev.map((conversation) => {
-        if (conversation.id === activeConversationId) {
-          return {
-            ...conversation,
-            messages: [...conversation.messages, message],
-            updatedAt: Date.now(),
-          };
-        }
-        return conversation;
-      })
+      prev.map((conversation) =>
+        conversation.id === id
+          ? { ...conversation, updatedAt: Date.now() }
+          : conversation
+      )
     );
   };
 
@@ -80,7 +61,7 @@ export default function SocraticUPage() {
         chatArea={
           <ChatArea
             conversation={activeConversation}
-            onSendMessage={handleSendMessage}
+            onConversationActivity={handleConversationActivity}
           />
         }
         rightPanel={<RightPanel />}

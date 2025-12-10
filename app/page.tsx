@@ -1,24 +1,46 @@
-"use client";
-import { useState } from "react";
+'use client';
 
-export default function Home() {
-  const [count, setCount] = useState(0);
+import { useChat } from '@ai-sdk/react';
+import { useState } from 'react';
 
+export default function Chat() {
+  const [input, setInput] = useState('');
+  const { messages, sendMessage } = useChat();
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-      <div className="text-center space-y-4">
-        <h1 className="text-3xl font-bold">SocraticU · Next.js 版本</h1>
-        <p className="text-sm text-slate-400">
-          这是首页（/）。下面这个按钮运行在客户端：
-        </p>
+    <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
+      {messages.map(message => (
+        <div key={message.id} className="whitespace-pre-wrap">
+          {message.role === 'user' ? 'User: ' : 'AI: '}
+          {message.parts.map((part, i) => {
+            switch (part.type) {
+              case 'text':
+                return <div key={`${message.id}-${i}`}>{part.text}</div>;
+              case 'tool-weather':
+              case 'tool-convertFahrenheitToCelsius':
+                return (
+                  <pre key={`${message.id}-${i}`}>
+                    {JSON.stringify(part, null, 2)}
+                  </pre>
+                );
+            }
+          })}
+        </div>
+      ))}
 
-        <button
-          className="px-4 py-2 rounded bg-teal-500 text-sm hover:bg-teal-400"
-          onClick={() => setCount((c) => c + 1)}
-        >
-          点击次数：{count}
-        </button>
-      </div>
-    </main>
+      <form
+        onSubmit={e => {
+          e.preventDefault();
+          sendMessage({ text: input });
+          setInput('');
+        }}
+      >
+        <input
+          className="fixed dark:bg-zinc-900 bottom-0 w-full max-w-md p-2 mb-8 border border-zinc-300 dark:border-zinc-800 rounded shadow-xl"
+          value={input}
+          placeholder="Say something..."
+          onChange={e => setInput(e.currentTarget.value)}
+        />
+      </form>
+    </div>
   );
 }
