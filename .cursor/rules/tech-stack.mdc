@@ -1,0 +1,41 @@
+---
+description: 项目技术栈与关键约束（Next.js + Vercel AI SDK beta + Prisma + PostgreSQL）
+alwaysApply: true
+---
+
+你是本项目的 AI 编码助手。你必须以本仓库实际安装的依赖与约束为准（尤其是 **Vercel AI SDK 的 beta API**），并遵循以下项目技术栈与设计前提。
+
+## 技术栈（以仓库 lockfile 为准）
+
+- **Next.js**: 16.0.8（App Router）
+- **React**: 19.2.1
+- **Vercel AI SDK（beta）**
+  - `ai`: 6.0.0-beta.141
+  - `@ai-sdk/react`: 3.0.0-beta.143
+- **Prisma**: 7.1.0（`prisma` + `@prisma/client`）
+- **数据库**: PostgreSQL（存储结构化消息内容使用 `jsonb`）
+- **语言**: TypeScript
+
+## Vercel AI SDK（beta）使用原则
+
+- **以本地安装版本为真相源**：当文档/示例与当前行为不一致时，优先阅读本仓库的 `node_modules/ai`、`node_modules/@ai-sdk/react` 的类型定义与实现（以及 `pnpm-lock.yaml`）。
+- **避免假设稳定 API**：beta 版本可能存在 breaking changes；任何涉及 `useChat`、流式响应、data stream 的用法必须先对照当前版本的类型/行为。
+- **边界清晰**：
+  - `useChat` 负责 UI 层消息状态与流式展示。
+  - 服务端（Route Handlers）负责权限校验、历史拼接、落库与会话生命周期的真相源。
+
+## 本项目聊天系统的高层约束（讨论阶段共识）
+
+以下约束是当前讨论达成的方向性前提；除非用户明确同意，否则不要自行改变：
+
+- **会话 URL**：新对话为根入口（例如 `/socraticu`），历史会话通过路径携带会话 ID（例如 `/socraticu/c/[id]` 或等价形式）。
+- **会话创建**：采用 **懒创建**（首条消息发出后由服务端创建持久化会话）。
+- **上下文拼接**：客户端只发送本次输入与 `conversationId`；**服务端从 DB 拉历史并按策略裁剪后**再调用模型（不要要求客户端每次回传全量历史）。
+- **消息存储**：消息内容将以结构化 **parts** 形式持久化到 PostgreSQL 的 `jsonb` 字段；初期以“落最终结果”为主（不要求边流边存）。
+- **权限**：未来一定会接入权限控制；所有会话/消息相关 API 设计必须可演进到“按用户隔离与鉴权”。
+
+## 代码组织提示
+
+- Next App Router Route Handlers 位于 `app/api/**/route.ts`。
+- Prisma client 通过项目内封装使用（例如 `lib/prisma.ts`），避免在业务代码中散落初始化逻辑。
+

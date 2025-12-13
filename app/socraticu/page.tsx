@@ -1,71 +1,80 @@
 "use client";
 
-import { Sidebar } from "../../components/sidebar/Sidebar";
-import { ChatArea } from "../../components/chat/ChatArea";
-import { RightPanel } from "../../components/panels/RightPanel";
-import Layout from "../../components/layout/Layout";
-import { useState } from "react";
-import {
-  type Conversation,
-} from "../../components/chat/chat";
+import { Sidebar } from "@/components/sidebar/Sidebar";
+import { ChatArea, useConversations } from "@/components/chat";
+import { RightPanel } from "@/components/panels/RightPanel";
+import Layout from "@/components/layout/Layout";
+import { useEffect, useState } from "react";
+
+const UI_STORAGE_KEY = "socraticu.ui";
+const UI_STORAGE_VERSION = 1 as const;
 
 export default function SocraticUPage() {
+  const {
+    activeConversationId,
+    setActiveConversationId,
+    activeConversation,
+    groups,
+    searchQuery,
+    setSearchQuery,
+    newChat,
+    ensureConversation,
+    touchConversation,
+  } = useConversations();
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string>('');
-  // 控制侧边栏是否打开
+  // 1. 默认状态：true (服务端和客户端首帧一致)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // 处理新建对话
-  const handleNewChat = () => {
-    const newConversation: Conversation = {
-      id: crypto.randomUUID(),
-      title: `New Chat ${conversations.length + 1}`,
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    setConversations((prev) => [...prev, newConversation]);
-    setActiveConversationId(newConversation.id);
-  };
+  // 2. 客户端挂载后，读取本地存储恢复状态
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(UI_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.version === UI_STORAGE_VERSION && typeof parsed.sidebarOpen === "boolean") {
+          setIsSidebarOpen(parsed.sidebarOpen);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
-  const handleConversationActivity = (id: string) => {
-    setConversations((prev) =>
-      prev.map((conversation) =>
-        conversation.id === id
-          ? { ...conversation, updatedAt: Date.now() }
-          : conversation
-      )
-    );
-  };
-
-  // 计算当前选中的 conversation 对象
-  const activeConversation = conversations.find(
-    (c) => c.id === activeConversationId
-  );
+  // 3. 状态变更时，写入本地存储
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        UI_STORAGE_KEY,
+        JSON.stringify({ version: UI_STORAGE_VERSION, sidebarOpen: isSidebarOpen })
+      );
+    } catch {
+      // ignore
+    }
+  }, [isSidebarOpen]);
 
   return (
-    <div>
-      <Layout
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-        sidebar={
-          <Sidebar
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            onSelectConversation={setActiveConversationId}
-            onNewChat={handleNewChat}
-            onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          />
-        }
-        chatArea={
-          <ChatArea
-            conversation={activeConversation}
-            onConversationActivity={handleConversationActivity}
-          />
-        }
-        rightPanel={<RightPanel />}
-      />
-    </div>
+    <Layout
+      isSidebarOpen={isSidebarOpen}
+      onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+      sidebar={
+        <Sidebar
+          groups={groups}
+          activeConversationId={activeConversationId}
+          onSelectConversation={setActiveConversationId}
+          onNewChat={newChat}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+        />
+      }
+      chatArea={
+        <ChatArea
+          conversation={activeConversation}
+          onConversationActivity={touchConversation}
+          onStartConversation={ensureConversation}
+        />
+      }
+      rightPanel={<RightPanel />}
+    />
   );
 }
