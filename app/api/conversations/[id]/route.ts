@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { getConversation, updateConversationTitle, deleteConversation } from "@/lib/db/conversation";
 
 const TEMP_USER_ID = "default-user";
 
@@ -9,24 +9,13 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id },
-      include: {
-        messages: {
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
+    const conversation = await getConversation(id, TEMP_USER_ID);
 
     if (!conversation) {
       return NextResponse.json(
         { error: "Conversation not found" },
         { status: 404 }
       );
-    }
-
-    if (conversation.userId !== TEMP_USER_ID) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     return NextResponse.json(conversation);
@@ -48,15 +37,7 @@ export async function PATCH(
     const body = await request.json();
     const { title } = body;
 
-    const conversation = await prisma.conversation.update({
-      where: {
-        id,
-        userId: TEMP_USER_ID, // 确保只能改自己的
-      },
-      data: {
-        title,
-      },
-    });
+    const conversation = await updateConversationTitle(id, TEMP_USER_ID, title);
 
     return NextResponse.json(conversation);
   } catch (error) {
@@ -74,13 +55,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    await prisma.conversation.delete({
-      where: {
-        id,
-        userId: TEMP_USER_ID,
-      },
-    });
-
+    await deleteConversation(id, TEMP_USER_ID);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to delete conversation:", error);
@@ -90,4 +65,3 @@ export async function DELETE(
     );
   }
 }
-

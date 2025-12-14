@@ -1,94 +1,146 @@
 import {
   streamText,
+  ModelMessage,
+  UserContent,
+  AssistantContent,
   UIMessage,
-  convertToModelMessages,
-  tool,
-  stepCountIs,
-  TextUIPart,
+  UI_MESSAGE_STREAM_HEADERS,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
 } from 'ai';
+import { waitUntil } from '@vercel/functions';
+import { ensureConversationById, getConversation, touchConversation, updateConversationTitle } from "@/lib/db/conversation";
+import { createMessage } from "@/lib/db/message";
+import { textToParts, parseMessageParts } from "@/lib/chat/utils";
+import { Role } from "@/generated/prisma/client";
 import { z } from 'zod';
-import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+export const maxDuration = 30;
+
+type AppUIMessage = UIMessage<unknown, { conversation_id: { id: string } }>;
+
+// Helper to map DB parts to SDK content
+function dbPartsToUserContent(dbParts: unknown): UserContent {
+    const parts = parseMessageParts(dbParts);
+    if (parts.length === 0) return "";
+    
+    return parts.map(p => {
+        // Assume text for now, as DB schema only guarantees text in this iteration
+        if (p.type === 'text') return { type: 'text', text: p.text };
+        return { type: 'text', text: '' }; 
+    });
+}
+
+function dbPartsToAssistantContent(dbParts: unknown): AssistantContent {
+    const parts = parseMessageParts(dbParts);
+    if (parts.length === 0) return "";
+    
+    return parts.map(p => {
+        if (p.type === 'text') return { type: 'text', text: p.text };
+        return { type: 'text', text: '' };
+    });
+}
 
 export async function POST(req: Request) {
   try {
-    const { messages, conversationId }: { messages: UIMessage[], conversationId?: string } = await req.json();
+    const bodyJson: unknown = await req.json();
 
-    if (!conversationId) {
-      return Response.json({ error: "conversationId is required" }, { status: 400 });
+    const bodySchema = z.object({
+      conversationId: z.string().uuid("Invalid conversation ID format"), // Must be UUID provided by client
+      clientMessageId: z.string().uuid(),
+      input: z.array(z.object({ type: z.literal('text'), text: z.string() })).min(1),
+    });
+
+    const parsedBody = bodySchema.safeParse(bodyJson);
+    if (!parsedBody.success) {
+      return Response.json(
+        { error: 'Invalid request body', details: parsedBody.error.flatten() },
+        { status: 400 },
+      );
     }
 
-    // 1. 保存用户最新的一条消息
-    const lastUserMessage = messages[messages.length - 1];
-    if (lastUserMessage && lastUserMessage.role === Role.USER) {
-      const content = lastUserMessage.parts
-        .filter((part): part is TextUIPart => part.type === 'text')
-        .map((part) => part.text)
-        .join('');
+    const { conversationId, clientMessageId, input } = parsedBody.data;
+    const userId = "default-user"; // TODO: Replace with real auth
 
-      await prisma.message.create({
-        data: {
-          conversationId,
-          role: Role.USER,
-          content,
-        },
-      });
+    // 1. Optimistic Creation / Retrieval
+    // We trust the client provided ID (after validation)
+    await ensureConversationById(conversationId, userId, clientMessageId);
+    
+    // 2. Persist User Message
+    await createMessage(conversationId, Role.user, input, clientMessageId);
+
+    // 3. Fetch Full History
+    const conversation = await getConversation(conversationId, userId);
+    const historyMessages = conversation?.messages || [];
+
+    // Generate title if this is the first message (or only one user message)
+    // Simple heuristic: if total messages <= 1 (just the one we added)
+    if (historyMessages.length <= 1) {
+        const text = input
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n');
+        const title = text.slice(0, 30);
+        await updateConversationTitle(conversationId, userId, title);
     }
 
-    const result = streamText({
-      model: "google/gemini-2.5-flash",
-      messages: convertToModelMessages(messages),
-      stopWhen: stepCountIs(5),
-      tools: {
-        weather: tool({
-          description: 'Get the weather in a location (fahrenheit)',
-          inputSchema: z.object({
-            location: z.string().describe('The location to get the weather for'),
-          }),
-          execute: async ({ location }) => {
-            const temperature = Math.round(Math.random() * (90 - 32) + 32);
-            return {
-              location,
-              temperature,
-            };
-          },
-        }),
-        convertFahrenheitToCelsius: tool({
-          description: 'Convert a temperature in fahrenheit to celsius',
-          inputSchema: z.object({
-            temperature: z
-              .number()
-              .describe('The temperature in fahrenheit to convert'),
-          }),
-          execute: async ({ temperature }) => {
-            const celsius = Math.round((temperature - 32) * (5 / 9));
-            return {
-              celsius,
-            };
-          },
-        }),
-      },
-      onFinish: async ({ text }) => {
-        // 2. 保存 AI 的回复
-        if (text) {
-          await prisma.message.create({
-            data: {
-              conversationId,
-              role: Role.ASSISTANT,
-              content: text,
-            },
-          });
+    // 4. Convert to ModelMessage
+    const coreMessages: ModelMessage[] = historyMessages.map(m => {
+        const role = m.role;
+        
+        if (role === Role.user) {
+            return { role: 'user', content: dbPartsToUserContent(m.parts) };
+        } else if (role === Role.assistant) {
+            return { role: 'assistant', content: dbPartsToAssistantContent(m.parts) };
+        } else if (role === Role.system) {
+            const parts = parseMessageParts(m.parts);
+            const text = parts.map(p => p.text).join('\n');
+            return { role: 'system', content: text };
         }
+        
+        return { role: 'user', content: dbPartsToUserContent(m.parts) }; 
+    });
+
+    // 5. Stream
+    const result = streamText({
+      model: ('google/gemini-2.0-flash'),
+      messages: coreMessages,
+      onFinish: async ({ text }) => {
+        waitUntil((async () => {
+            try {
+                const parts = textToParts(text);
+                await createMessage(conversationId, Role.assistant, parts);
+                await touchConversation(conversationId, userId);
+            } catch (error) {
+                console.error("Failed to persist assistant message:", error);
+            }
+        })());
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    const stream = createUIMessageStream<AppUIMessage>({
+      execute: ({ writer }) => {
+        writer.write({ type: 'start' });
+        // We still send the ID for confirmation, though client already has it
+        writer.write({
+          type: 'data-conversation_id',
+          data: { id: conversationId },
+          transient: true,
+        });
+        writer.merge(result.toUIMessageStream<AppUIMessage>({ sendStart: false }));
+      },
+      onError: () => 'An error occurred.',
+    });
+
+    return createUIMessageStreamResponse({
+      stream,
+      headers: {
+        ...UI_MESSAGE_STREAM_HEADERS,
+        'x-conversation-id': conversationId,
+      },
+    });
+
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     console.error("POST /api/chat failed:", err);
-    return Response.json(
-      { error: message },
-      { status: 500 }
-    );
+    return Response.json({ error: String(err) }, { status: 500 });
   }
 }

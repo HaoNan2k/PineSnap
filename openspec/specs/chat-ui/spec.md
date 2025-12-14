@@ -1,7 +1,7 @@
 # chat-ui 规范
 
 ## Purpose
-待定 —— 该规范由归档变更 `update-chat-ui-document-assistant` 生成。归档后请更新本段 Purpose。
+本规范定义聊天 UI 的核心视觉与交互约束，覆盖用户消息与 assistant 消息的布局风格、复制操作、以及空态/加载态/错误态的一致性。
 
 ## Requirements
 

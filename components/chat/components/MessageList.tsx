@@ -1,7 +1,6 @@
 // 负责渲染消息列表的组件
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "@/components/chat/types";
-import { MessageRole } from "@/components/chat/types";
 import { AssistantTypingIndicator } from "@/components/chat/components/AssistantTypingIndicator";
 import { MessageRow } from "@/components/chat/components/MessageRow";
 import { MarkdownContent } from "@/components/chat/components/MarkdownContent";
@@ -44,8 +43,8 @@ export const MessageList = ({
           </div>
         ))}
 
-        {isAssistantTyping ? (
-          <MessageRow role={MessageRole.ASSISTANT}>
+        {isAssistantTyping && messages[messages.length - 1]?.role !== "assistant" ? (
+          <MessageRow role="assistant">
             <AssistantTypingIndicator />
           </MessageRow>
         ) : null}

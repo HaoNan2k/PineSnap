@@ -16,6 +16,9 @@ export const MessageInput = ({
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault();
     if (disabled || !input.trim()) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7084e3ee-1c7f-4437-8343-0f23286e4755',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MessageInput.tsx:19',message:'handleSubmit calling onSend',data:{inputType:typeof input,inputValue:input,inputLength:input.length,isNull:input===null,isUndefined:input===undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     onSend(input);
     setInput("");
   };

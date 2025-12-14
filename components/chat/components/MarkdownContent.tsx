@@ -32,7 +32,7 @@ export function MarkdownContent({ content }: { content: string }) {
   const normalized = useMemo(() => content ?? "", [content]);
 
   return (
-    <div className="text-[15px] leading-relaxed text-fg break-words">
+    <div className="text-[15px] leading-relaxed break-words">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -92,4 +92,3 @@ export function MarkdownContent({ content }: { content: string }) {
     </div>
   );
 }
-

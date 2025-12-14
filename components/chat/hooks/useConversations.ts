@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Conversation, Message, MessageRole } from "@/components/chat/types";
+import type { Conversation, Message } from "@/components/chat/types";
 import type { ConversationGroup } from "@/components/chat/types";
 import { groupByRecency } from "@/components/chat/utils/groupByRecency";
-
-// Import types from our generated Prisma client
-// 注意：因为是 JSON 传输，日期字段在传输中是 string，但在 Prisma 类型定义里是 Date。
-// 我们需要定义一个 "Network Type" 或者直接断言。
-import type { Conversation as PrismaConversation, Message as PrismaMessage, Role } from "@prisma/client";
+import { useRouter } from "next/navigation";
 
 // 定义后端 API 返回的数据形状 (JSON serialized)
-// 基本上就是 Prisma 类型，但 Date 字段变成了 string
-type ApiMessage = Omit<PrismaMessage, "createdAt"> & { createdAt: string };
-type ApiConversation = Omit<PrismaConversation, "createdAt" | "updatedAt"> & {
+// 注意：不要在 Client Components/Hooks 中引用 Prisma 类型（会把 Prisma client 引入到前端 bundle）。
+type ApiMessage = {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+};
+
+type ApiConversation = {
+  id: string;
+  title: string;
   createdAt: string;
   updatedAt: string;
   messages?: ApiMessage[];
@@ -21,9 +25,8 @@ type ApiConversation = Omit<PrismaConversation, "createdAt" | "updatedAt"> & {
 
 // --- Mappers ---
 
-function mapRole(role: Role | string): MessageRole {
-  // 简单映射，以后如果 Role 变复杂了可以在这里处理
-  return role as MessageRole;
+function mapRole(role: string): string {
+  return role;
 }
 
 function mapMessage(apiMsg: ApiMessage): Message {
@@ -48,8 +51,11 @@ function mapConversation(apiConv: ApiConversation): Conversation {
 }
 
 export function useConversations() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState("");
+  // activeConversationId is now managed by URL (page params), but we keep it here if needed for selection sync
+  // Actually, we don't strictly need it in state anymore if we pass it in from layout.
+  // But let's keep it simple: this hook manages list data.
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -70,29 +76,7 @@ export function useConversations() {
     load();
   }, []);
 
-  // 2. 当选中 ID 变化时，加载该会话的完整详情（包含消息）
-  useEffect(() => {
-    if (!activeConversationId) return;
-
-    async function loadDetail() {
-      try {
-        const res = await fetch(`/api/conversations/${activeConversationId}`);
-        if (!res.ok) return; // 可能是 404
-        const data = (await res.json()) as ApiConversation;
-        
-        const fullConv = mapConversation(data);
-        
-        setConversations((prev) =>
-          prev.map((c) => (c.id === fullConv.id ? fullConv : c))
-        );
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    loadDetail();
-  }, [activeConversationId]);
-
+  // Removed: loadDetail effect (Server Components handle this now)
 
   // --- Derived State ---
   const sortedConversations = useMemo(() => {
@@ -109,33 +93,11 @@ export function useConversations() {
     return groupByRecency(filteredConversations);
   }, [filteredConversations]);
 
-  const activeConversation = useMemo(() => {
-    return conversations.find((c) => c.id === activeConversationId);
-  }, [conversations, activeConversationId]);
-
-
   // --- Actions ---
 
   const newChat = async () => {
-    try {
-      const res = await fetch("/api/conversations", { method: "POST" });
-      if (!res.ok) throw new Error("Failed create");
-      const data = (await res.json()) as ApiConversation;
-      const newConv = mapConversation(data);
-
-      setConversations((prev) => [newConv, ...prev]);
-      setActiveConversationId(newConv.id);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const ensureConversation = async (id: string) => {
-    if (conversations.some((c) => c.id === id)) {
-      setActiveConversationId(id);
-      return;
-    }
-    await newChat();
+    // Just navigate to /chat, the page will generate ID
+    router.push("/chat");
   };
 
   const touchConversation = (id: string) => {
@@ -163,9 +125,10 @@ export function useConversations() {
 
   const deleteConversation = async (id: string) => {
     // 乐观更新
-    const prevActiveId = activeConversationId;
     setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (prevActiveId === id) setActiveConversationId("");
+    // We don't control active state here anymore, Layout should handle redirect if current is deleted
+    // But we can try:
+    router.push("/chat"); // Fallback to new chat if deleting
 
     try {
       await fetch(`/api/conversations/${id}`, { method: "DELETE" });
@@ -176,15 +139,11 @@ export function useConversations() {
 
   return {
     conversations: sortedConversations,
-    activeConversationId,
-    activeConversation,
     searchQuery,
     groups,
     isLoading,
-    setActiveConversationId,
     setSearchQuery,
     newChat,
-    ensureConversation,
     touchConversation,
     renameConversation,
     deleteConversation,

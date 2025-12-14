@@ -5,8 +5,12 @@ alwaysApply: true
 
 你是本项目的 AI 编码助手。你必须以本仓库实际安装的依赖与约束为准（尤其是 **Vercel AI SDK 的 beta API**），并遵循以下项目技术栈与设计前提。
 
+> **注意**：禁止在项目代码中使用 `as any`，请始终采用类型安全的方式处理类型断言和类型转换。
+> **包管理工具**：本项目使用 **pnpm** 进行依赖管理，所有依赖规范与安装均以 `pnpm-lock.yaml` 为准。
+
 ## 技术栈（以仓库 lockfile 为准）
 
+- **包管理器**: pnpm
 - **Next.js**: 16.0.8（App Router）
 - **React**: 19.2.1
 - **Vercel AI SDK（beta）**
@@ -18,7 +22,7 @@ alwaysApply: true
 
 ## Vercel AI SDK（beta）使用原则
 
-- **以本地安装版本为真相源**：当文档/示例与当前行为不一致时，优先阅读本仓库的 `node_modules/ai`、`node_modules/@ai-sdk/react` 的类型定义与实现（以及 `pnpm-lock.yaml`）。
+- **以本地安装版本为真相源**：当文档/示例与当前行为不一致时，优先阅读本仓库的 `node_modules/ai`、`node_modules/@ai-sdk/react` 的类型定义与实现，以及 `pnpm-lock.yaml`。
 - **避免假设稳定 API**：beta 版本可能存在 breaking changes；任何涉及 `useChat`、流式响应、data stream 的用法必须先对照当前版本的类型/行为。
 - **边界清晰**：
   - `useChat` 负责 UI 层消息状态与流式展示。

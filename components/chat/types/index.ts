@@ -1,5 +1,4 @@
 export type { Conversation, Message } from "@/components/chat/types/chat";
-export { MessageRole } from "@/components/chat/types/chat";
 
 export type { ConversationGroup, ConversationGroupId } from "@/components/chat/types/conversationGroup";
 

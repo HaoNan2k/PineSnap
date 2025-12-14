@@ -1,13 +1,11 @@
+"use client";
+
 import { useChat } from "@ai-sdk/react";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { z } from "zod";
 import { MessageList } from "@/components/chat/components/MessageList";
 import { MessageInput } from "@/components/chat/components/MessageInput";
-import {
-  MessageRole,
-  type Message,
-  type Conversation,
-} from "@/components/chat/types";
-import { ChatStatus, isChatBusy } from "@/components/chat/types";
+import { isChatBusy } from "@/components/chat/types";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles,
@@ -16,11 +14,12 @@ import {
   Lightbulb,
   MoreHorizontal,
 } from "lucide-react";
+import { ChatPart } from "@/lib/chat/types";
 
 interface ChatAreaProps {
-  conversation: Conversation | undefined;
-  onConversationActivity?: (id: string) => void;
-  onStartConversation?: (id: string) => void;
+  id: string;
+  initialMessages: UIMessage[];
+  title?: string;
 }
 
 const suggestions = [
@@ -30,103 +29,100 @@ const suggestions = [
   { icon: Sparkles, text: "帮我优化这段文案", color: "text-gray-600" },
 ];
 
-export const ChatArea = ({
-  conversation,
-  onConversationActivity,
-  onStartConversation,
-}: ChatAreaProps) => {
-  const [draftId] = useState(() => crypto.randomUUID());
-  const chatId = conversation?.id ?? draftId;
+function hasContent(m: unknown): m is { content: string } {
+  return typeof m === 'object' && m !== null && 'content' in m && typeof (m as { content: unknown }).content === 'string';
+}
 
-  // 1. 准备初始消息，供 useChat 使用
-  // useChat 会接管这些消息的状态，后续的 updates 也会在这里面
-  const initialMessages = useMemo(() => {
-    if (!conversation?.messages) return [];
-    return conversation.messages.map((m) => ({
-      id: m.id,
-      role: m.role === MessageRole.USER ? "user" : "assistant",
-      parts: [{ type: "text", text: m.content }],
-    }));
-  }, [conversation?.messages]); // 只有当 messages 数组引用变化时才重新计算（通常是切会话时）
+function hasCreatedAt(m: unknown): m is { createdAt: Date | number | string } {
+    return typeof m === 'object' && m !== null && 'createdAt' in m;
+}
+
+export const ChatArea = ({
+  id,
+  initialMessages,
+  title = "New Chat",
+}: ChatAreaProps) => {
 
   const {
-    messages: uiMessages,
+    messages,
     sendMessage,
     status,
-    setMessages,
   } = useChat({
-    id: chatId,
-    messages: initialMessages as any[], // 类型兼容
+    id: id,
+    messages: initialMessages, 
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+      prepareSendMessagesRequest: ({ messages: currentMessages, messageId }) => {
+        const last = currentMessages[currentMessages.length - 1];
+        let text = "";
+        if (last.parts && last.parts.length > 0) {
+             text = last.parts
+            .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+            .map((p) => p.text)
+            .join("\n");
+        } else if (hasContent(last)) {
+            text = last.content;
+        }
+
+        const input: ChatPart[] = [{ type: "text", text }];
+
+        return {
+          body: {
+            conversationId: id,
+            clientMessageId: messageId ?? crypto.randomUUID(),
+            input,
+          },
+        };
+      },
+    }),
+    dataPartSchemas: {
+      conversation_id: z.object({ id: z.string() }),
+    },
+    onFinish: () => {
+       window.history.replaceState({}, "", `/chat/c/${id}`);
+    }
   });
 
-  // 当切会话时，强制重置 useChat 的内部消息状态为当前会话的消息
-  // 这是为了解决 useChat 在 id 变化时有时不会自动重置 initialMessages 的问题（视版本而定）
-  // 或者当 useConversations 拉取到新数据时，更新 UI
-  useEffect(() => {
-    setMessages(initialMessages as any[]);
-  }, [initialMessages, setMessages]);
+  const mappedMessages = messages.map((m) => {
+      let content = "";
+      if (m.parts && m.parts.length > 0) {
+          content = m.parts
+            .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+            .map(p => p.text)
+            .join("\n");
+      } else if (hasContent(m)) {
+          content = m.content;
+      }
 
-  const submitLockRef = useRef(false);
-
-  // 2. 将 AI SDK 的 messages 映射回我们 UI 组件需要的 Message 类型
-  const mappedMessages: Message[] = uiMessages
-    .filter(
-      (message) => message.role === "user" || message.role === "assistant"
-    )
-    .map((message) => {
-      // 处理多模态 parts (text parts)
-      let text = "";
-      if (message.parts) {
-        text = message.parts
-          .filter(
-            (part: any): part is { type: "text"; text: string } =>
-              part.type === "text"
-          )
-          .map((part: any) => part.text)
-          .join("\n");
+      let createdAt = new Date();
+      if (hasCreatedAt(m)) {
+          createdAt = m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt);
       }
 
       return {
-        id: message.id,
-        role:
-          message.role === "user" ? MessageRole.USER : MessageRole.ASSISTANT,
-        content: text,
-        createdAt: new Date(), // 如果没有时间，默认现在
+          id: m.id,
+          role: m.role as "user" | "assistant" | "system",
+          content: content,
+          createdAt: createdAt,
       };
-    });
+  });
 
-  const handleSend = (content: string) => {
-    if (submitLockRef.current) return;
+  const handleSend = async (content: string) => {
     if (isChatBusy(status)) return;
+    
+    // Construct a UIMessage-like object to send
+    // We only provide parts as that's what we want to rely on
+    const userMessage = {
+        role: 'user',
+        parts: [{ type: 'text', text: content }],
+    };
 
-    submitLockRef.current = true;
-    if (!conversation) {
-      onStartConversation?.(chatId);
-    }
-    onConversationActivity?.(chatId);
-
-    // 使用 sendMessage 发送新消息
-    sendMessage(
-      {
-        parts: [{ type: "text", text: content }],
-      },
-      {
-        body: { conversationId: chatId },
-      }
-    );
+    // sendMessage in AI SDK expects an object with { text: string } or CreateMessage/UIMessage.
+    // Passing a string directly causes TypeError because SDK uses "text" in message check.
+    sendMessage({ text: content });
   };
 
   const isAssistantTyping = isChatBusy(status);
-
-  useEffect(() => {
-    if (status === ChatStatus.Ready || status === ChatStatus.Error) {
-      submitLockRef.current = false;
-    }
-  }, [status]);
-
-  useEffect(() => {
-    submitLockRef.current = false;
-  }, [conversation?.id]);
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -137,7 +133,7 @@ export const ChatArea = ({
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <span className="font-semibold text-gray-900">
-            {conversation?.title || "New Chat"}
+            {title}
           </span>
         </div>
         <Button

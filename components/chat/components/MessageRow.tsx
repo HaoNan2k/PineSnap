@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { MessageRole } from "@/components/chat/types";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw } from "lucide-react";
@@ -9,11 +8,11 @@ export const MessageRow = ({
   children,
   createdAt,
 }: {
-  role: MessageRole;
+  role: string;
   children: ReactNode;
   createdAt?: number | Date;
 }) => {
-  const isUser = role === MessageRole.USER;
+  const isUser = role === "user";
 
   const formatTime = (dateInput?: number | Date) => {
     if (!dateInput) return "";
@@ -26,7 +25,17 @@ export const MessageRow = ({
 
   return (
     <div className={`group flex gap-4 ${isUser ? "flex-row-reverse" : ""}`}>
-      {/* ... */}
+      <Avatar className="h-8 w-8 mt-1">
+        <AvatarFallback
+          className={
+            isUser
+              ? "bg-gray-900 text-white text-xs font-semibold"
+              : "bg-gray-100 text-gray-700 text-xs font-semibold"
+          }
+        >
+          {isUser ? "你" : "AI"}
+        </AvatarFallback>
+      </Avatar>
       <div className={`flex flex-col max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
         <div
           className={`px-4 py-3 rounded-2xl ${

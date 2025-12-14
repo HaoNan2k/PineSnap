@@ -5,7 +5,8 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -16,12 +17,15 @@ model Conversation {
   id        String   @id @default(cuid())
   title     String   @default("New Chat")
   userId    String
+  // Idempotency key for the first user message (used for lazy-create retries)
+  firstClientMessageId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   messages  Message[]
 
   @@index([userId])
+  @@unique([userId, firstClientMessageId])
 }
 
 model Message {
@@ -29,16 +33,20 @@ model Message {
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  role           Role     @default(USER)
+  role           Role     @default(user)
+  // Idempotency key from the client for this message (used to dedupe retries)
+  clientMessageId String?
   content        String       @db.Text
+  parts          Json         @default("[]") // Structured content
   parentMessageId String?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId])
+  @@unique([conversationId, clientMessageId])
 }
 
 enum Role {
-  USER      @map("user")
-  ASSISTANT @map("assistant")
-  SYSTEM    @map("system")
+  user
+  assistant
+  system
 }
