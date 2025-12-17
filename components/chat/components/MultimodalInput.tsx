@@ -1,4 +1,9 @@
-import { useRef, useState, useCallback, type ChangeEvent, type KeyboardEvent } from "react";
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import { Paperclip, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +23,7 @@ export const MultimodalInput = ({
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
-  
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,45 +72,54 @@ export const MultimodalInput = ({
     }
   };
 
-  const handleFileChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
-      if (files.length === 0) return;
+  const handleUploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
 
-      // Add filenames to queue to show loading state
-      setUploadQueue((prev) => [...prev, ...files.map((f) => f.name)]);
+    // Add filenames to queue to show loading state
+    setUploadQueue((prev) => [...prev, ...files.map((f) => f.name)]);
 
-      try {
-        const uploadPromises = files.map((file) => uploadFile(file));
-        const uploadedAttachments = await Promise.all(uploadPromises);
-        const successful: Attachment[] = uploadedAttachments.filter(
-          (att): att is Attachment => att !== undefined
-        );
+    try {
+      const uploadPromises = files.map((file) => uploadFile(file));
+      const uploadedAttachments = await Promise.all(uploadPromises);
+      const successful: Attachment[] = uploadedAttachments.filter(
+        (att): att is Attachment => att !== undefined
+      );
 
-        setAttachments((prev) => [...prev, ...successful]);
-      } finally {
-        // Clear queue (simple implementation: assumes all finished)
-        // A more robust implementation would track individual file status
-        setUploadQueue([]);
-        // Reset input so change event triggers again for same file
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    },
-    []
-  );
+      setAttachments((prev) => [...prev, ...successful]);
+    } finally {
+      // Clear queue (simple implementation: assumes all finished)
+      // A more robust implementation would track individual file status
+      setUploadQueue([]);
+      // Reset input so change event triggers again for same file
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    await handleUploadFiles(files);
+  };
+
+  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData?.files || []);
+    if (files.length === 0) return;
+    event.preventDefault();
+    await handleUploadFiles(files);
+  };
 
   const handleSubmit = () => {
     if (disabled) return;
     const hasText = input.trim().length > 0;
     const hasAttachments = attachments.length > 0;
-    
+
     if (!hasText && !hasAttachments) return;
-    
+
     // Prevent send if still uploading
     if (uploadQueue.length > 0) return;
 
     onSend(input, attachments);
-    
+
     setInput("");
     setAttachments([]);
   };
@@ -118,7 +132,8 @@ export const MultimodalInput = ({
   };
 
   const isUploading = uploadQueue.length > 0;
-  const isSendDisabled = disabled || isUploading || (!input.trim() && attachments.length === 0);
+  const isSendDisabled =
+    disabled || isUploading || (!input.trim() && attachments.length === 0);
 
   return (
     <div className="border-t border-gray-100 bg-white px-4 md:px-6 py-4">
@@ -171,6 +186,7 @@ export const MultimodalInput = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={placeholder}
             className="flex-1 min-h-[44px] max-h-32 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-gray-900 placeholder:text-gray-400 py-3 px-1"
             rows={1}
@@ -194,4 +210,3 @@ export const MultimodalInput = ({
     </div>
   );
 };
-
