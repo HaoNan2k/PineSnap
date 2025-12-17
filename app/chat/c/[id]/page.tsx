@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getConversation } from "@/lib/db/conversation";
-import { convertToUIMessages } from "@/lib/chat/utils";
+import { convertDbToUIMessages } from "@/lib/chat/converter";
 import { ChatArea } from "@/components/chat/components/ChatArea";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
@@ -15,12 +15,12 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     notFound();
   }
 
-  const uiMessages = convertToUIMessages(conversation.messages);
+  const uiMessages = await convertDbToUIMessages(conversation.messages);
 
   return (
     <div className="flex flex-col h-full w-full">
       <ChatArea 
-        id={id} 
+        initialConversationId={id}
         initialMessages={uiMessages} 
         title={conversation.title || "Chat"} 
       />

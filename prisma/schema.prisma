@@ -14,7 +14,7 @@ datasource db {
 }
 
 model Conversation {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid(7))
   title     String   @default("New Chat")
   userId    String
   // Idempotency key for the first user message (used for lazy-create retries)
@@ -29,7 +29,7 @@ model Conversation {
 }
 
 model Message {
-  id             String       @id @default(cuid())
+  id             String       @id @default(uuid(7))
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

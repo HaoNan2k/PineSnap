@@ -1,10 +1,12 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, type UIMessage, type FileUIPart } from "ai";
 import { z } from "zod";
+import { useMemo, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { MessageList } from "@/components/chat/components/MessageList";
-import { MessageInput } from "@/components/chat/components/MessageInput";
+import { MultimodalInput } from "@/components/chat/components/MultimodalInput";
 import { isChatBusy } from "@/components/chat/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +17,10 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { ChatPart } from "@/lib/chat/types";
+import { Attachment } from "@/components/chat/components/PreviewAttachment";
 
 interface ChatAreaProps {
-  id: string;
+  initialConversationId?: string;
   initialMessages: UIMessage[];
   title?: string;
 }
@@ -30,73 +33,146 @@ const suggestions = [
 ];
 
 function hasContent(m: unknown): m is { content: string } {
-  return typeof m === 'object' && m !== null && 'content' in m && typeof (m as { content: unknown }).content === 'string';
+  return (
+    typeof m === "object" &&
+    m !== null &&
+    "content" in m &&
+    typeof (m as { content: unknown }).content === "string"
+  );
 }
 
 function hasCreatedAt(m: unknown): m is { createdAt: Date | number | string } {
-    return typeof m === 'object' && m !== null && 'createdAt' in m;
+  return typeof m === "object" && m !== null && "createdAt" in m;
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function getFileRefFromProviderMetadata(meta: unknown): string | undefined {
+  if (!isRecord(meta)) return undefined;
+  const attachment = meta["attachment"];
+  if (!isRecord(attachment)) return undefined;
+  const ref = attachment["ref"];
+  return typeof ref === "string" && ref.length > 0 ? ref : undefined;
 }
 
 export const ChatArea = ({
-  id,
+  initialConversationId,
   initialMessages,
   title = "New Chat",
 }: ChatAreaProps) => {
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    initialConversationId
+  );
 
-  const {
-    messages,
-    sendMessage,
-    status,
-  } = useChat({
-    id: id,
-    messages: initialMessages, 
-    transport: new DefaultChatTransport({
+  const hookId = useMemo(
+    () => initialConversationId ?? uuidv4(),
+    [initialConversationId]
+  );
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
       api: "/api/chat",
-      prepareSendMessagesRequest: ({ messages: currentMessages, messageId }) => {
+        prepareSendMessagesRequest: ({ messages: currentMessages }) => {
         const last = currentMessages[currentMessages.length - 1];
-        let text = "";
-        if (last.parts && last.parts.length > 0) {
-             text = last.parts
-            .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-            .map((p) => p.text)
-            .join("\n");
-        } else if (hasContent(last)) {
-            text = last.content;
-        }
+          const clientMessageId = last.id;
 
-        const input: ChatPart[] = [{ type: "text", text }];
+          const input: ChatPart[] = [];
+        if (last.parts && last.parts.length > 0) {
+            for (const p of last.parts) {
+              if (p.type === "text") {
+                input.push({ type: "text", text: p.text });
+              } else if (p.type === "file") {
+                // Try to extract ref from providerMetadata (injected during handleSend)
+                // If not found, it might be a Data URL (which we shouldn't send, but for now we fallback/ignore)
+                const ref =
+                  getFileRefFromProviderMetadata(p.providerMetadata) ??
+                  (typeof p.url === "string" && !p.url.startsWith("data:")
+                    ? p.url
+                    : undefined);
+
+                if (ref) {
+                  input.push({
+                    type: "file",
+                    name: p.filename ?? "文件",
+                    mediaType: p.mediaType ?? "application/octet-stream",
+                    ref,
+                  });
+                }
+              }
+            }
+        } else if (hasContent(last)) {
+            input.push({ type: "text", text: last.content });
+        }
 
         return {
           body: {
-            conversationId: id,
-            clientMessageId: messageId ?? crypto.randomUUID(),
+              ...(conversationId ? { conversationId } : {}),
+              clientMessageId,
             input,
           },
         };
       },
     }),
+    [conversationId]
+  );
+
+  const { messages, sendMessage, status } = useChat({
+    id: hookId,
+    messages: initialMessages,
+    transport,
     dataPartSchemas: {
       conversation_id: z.object({ id: z.string() }),
     },
-    onFinish: () => {
+    onData: (dataPart) => {
+      if (dataPart.type !== "data-conversation_id") return;
+      if (!isRecord(dataPart.data) || typeof dataPart.data.id !== "string")
+        return;
+      const id = dataPart.data.id;
+      setConversationId((prev) => prev ?? id);
        window.history.replaceState({}, "", `/chat/c/${id}`);
-    }
+    },
   });
 
-  const mappedMessages = messages.map((m) => {
+  const mappedMessages = useMemo(
+    () =>
+      messages.map((m) => {
       let content = "";
       if (m.parts && m.parts.length > 0) {
-          content = m.parts
-            .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-            .map(p => p.text)
-            .join("\n");
+          const texts = m.parts
+            .filter(
+              (p): p is Extract<typeof p, { type: "text" }> => p.type === "text"
+            )
+            .map((p) => p.text);
+          const files = m.parts
+            .filter(
+              (p): p is Extract<typeof p, { type: "file" }> => p.type === "file"
+            )
+            .map((p) => `📎 ${p.filename ?? "文件"}`);
+
+          content = [...texts, ...files].join("\n");
       } else if (hasContent(m)) {
           content = m.content;
       }
 
       let createdAt = new Date();
       if (hasCreatedAt(m)) {
-          createdAt = m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt);
+          createdAt =
+            m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt);
+        } else if (
+          typeof m === "object" &&
+          m !== null &&
+          "metadata" in m &&
+          typeof (m as { metadata?: unknown }).metadata === "object" &&
+          (m as { metadata?: Record<string, unknown> }).metadata !== null &&
+          typeof (m as { metadata?: Record<string, unknown> }).metadata
+            ?.createdAt === "string"
+        ) {
+          createdAt = new Date(
+            (m as { metadata: { createdAt: string } }).metadata.createdAt
+          );
       }
 
       return {
@@ -105,21 +181,30 @@ export const ChatArea = ({
           content: content,
           createdAt: createdAt,
       };
-  });
+      }),
+    [messages]
+  );
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, attachments: Attachment[]) => {
     if (isChatBusy(status)) return;
     
-    // Construct a UIMessage-like object to send
-    // We only provide parts as that's what we want to rely on
-    const userMessage = {
-        role: 'user',
-        parts: [{ type: 'text', text: content }],
-    };
+    // Construct FileUIParts from attachments
+    const fileParts: FileUIPart[] = attachments.map((att) => ({
+      type: "file",
+      mediaType: att.mediaType ?? "application/octet-stream",
+      url: att.url,
+      filename: att.name,
+      ...(att.ref ? { providerMetadata: { attachment: { ref: att.ref } } } : {}),
+    }));
 
-    // sendMessage in AI SDK expects an object with { text: string } or CreateMessage/UIMessage.
-    // Passing a string directly causes TypeError because SDK uses "text" in message check.
-    sendMessage({ text: content });
+    const textPart = content.trim()
+      ? [{ type: "text" as const, text: content }]
+      : [];
+
+    await sendMessage({
+      role: "user",
+      parts: [...textPart, ...fileParts],
+    });
   };
 
   const isAssistantTyping = isChatBusy(status);
@@ -132,9 +217,7 @@ export const ChatArea = ({
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-gray-900">
-            {title}
-          </span>
+          <span className="font-semibold text-gray-900">{title}</span>
         </div>
         <Button
           variant="ghost"
@@ -163,7 +246,7 @@ export const ChatArea = ({
             {suggestions.map((suggestion, index) => (
               <button
                 key={index}
-                onClick={() => handleSend(suggestion.text)}
+                onClick={() => handleSend(suggestion.text, [])}
                 className="flex items-center gap-3 p-4 rounded-2xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 text-left group"
               >
                 <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center group-hover:bg-gray-200 transition-colors">
@@ -184,7 +267,7 @@ export const ChatArea = ({
       )}
 
       {/* Input Area */}
-      <MessageInput onSend={handleSend} disabled={isAssistantTyping} />
+      <MultimodalInput onSend={handleSend} disabled={isAssistantTyping} />
     </div>
   );
 };

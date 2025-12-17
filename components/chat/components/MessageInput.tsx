@@ -7,20 +7,27 @@ export const MessageInput = ({
   onSend,
   disabled,
 }: {
-  onSend: (content: string) => void;
+  onSend: (content: string, files?: FileList) => void;
   disabled?: boolean;
 }) => {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<FileList | undefined>(undefined);
 
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault();
-    if (disabled || !input.trim()) return;
+    if (disabled) return;
+    const hasText = input.trim().length > 0;
+    const hasFiles = (files?.length ?? 0) > 0;
+    if (!hasText && !hasFiles) return;
     // #region agent log
     fetch('http://127.0.0.1:7243/ingest/7084e3ee-1c7f-4437-8343-0f23286e4755',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MessageInput.tsx:19',message:'handleSubmit calling onSend',data:{inputType:typeof input,inputValue:input,inputLength:input.length,isNull:input===null,isUndefined:input===undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
-    onSend(input);
+    onSend(input, files);
     setInput("");
+    setFiles(undefined);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -38,9 +45,21 @@ export const MessageInput = ({
             variant="ghost"
             size="icon"
             className="w-9 h-9 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled}
           >
             <Paperclip className="w-5 h-5" />
           </Button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => setFiles(e.target.files ?? undefined)}
+            disabled={disabled}
+          />
 
           <Textarea
             ref={textareaRef}
@@ -64,7 +83,7 @@ export const MessageInput = ({
 
             <Button
               onClick={() => handleSubmit()}
-              disabled={!input.trim() || disabled}
+              disabled={(!input.trim() && !(files?.length ?? 0)) || disabled}
               size="icon"
               className="w-9 h-9 rounded-xl bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-40 disabled:bg-gray-300"
             >
@@ -72,6 +91,14 @@ export const MessageInput = ({
             </Button>
           </div>
         </div>
+
+        {(files?.length ?? 0) > 0 ? (
+          <div className="max-w-3xl mx-auto mt-2">
+            <div className="text-xs text-gray-500">
+              已选择 {files?.length} 个文件
+            </div>
+          </div>
+        ) : null}
 
         <p className="text-center text-xs text-gray-400 mt-3">
           AI 可能会产生错误。请核实重要信息。

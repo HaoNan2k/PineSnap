@@ -11,6 +11,19 @@ TBD - created by archiving change refactor-chat-conversation-foundation. Update 
 - **THEN** 消息 MUST 存储 `parts` 字段
 - **AND** `parts` MUST 为 `ChatPart[]` 的 JSON 表示（存储类型为 `jsonb`）
 
+### Requirement: ChatPart supports full semantic union
+系统 SHALL 支持完整的对话语义存储，包括文本、文件引用、工具调用与结果。
+
+#### Scenario: 存储 Tool Call 和 Result
+- **WHEN** 模型发起工具调用或产生工具结果
+- **THEN** 系统 MUST 全量存储 `toolCallId`, `toolName`, `input`/`output`
+- **AND** 存储格式 MUST 符合 `ChatPart` schema
+
+#### Scenario: 存储 File Ref
+- **WHEN** 用户发送文件
+- **THEN** 系统 MUST 存储文件的 `ref` (内部引用)
+- **AND** 系统 MUST NOT 在 DB 中存储文件二进制内容
+
 ### Requirement: Store final assistant output first
 系统 SHALL 初期仅落库 assistant 的最终结果，不要求边流边存。
 
@@ -79,4 +92,3 @@ TBD - created by archiving change refactor-chat-conversation-foundation. Update 
 #### Scenario: Fetch History
 - **WHEN** 客户端请求有效 `conversationId` 的历史
 - **THEN** 系统 MUST 返回按时间顺序排列的消息列表。
-

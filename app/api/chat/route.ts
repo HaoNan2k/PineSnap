@@ -1,144 +1,168 @@
 import {
   streamText,
-  ModelMessage,
-  UserContent,
-  AssistantContent,
   UIMessage,
   UI_MESSAGE_STREAM_HEADERS,
   createUIMessageStream,
   createUIMessageStreamResponse,
-} from 'ai';
-import { waitUntil } from '@vercel/functions';
-import { ensureConversationById, getConversation, touchConversation, updateConversationTitle } from "@/lib/db/conversation";
+} from "ai";
+import { waitUntil } from "@vercel/functions";
+import {
+  ensureConversationById,
+  ensureConversationForFirstMessage,
+  getConversation,
+  touchConversation,
+  updateConversationTitle,
+} from "@/lib/db/conversation";
 import { createMessage } from "@/lib/db/message";
-import { textToParts, parseMessageParts } from "@/lib/chat/utils";
 import { Role } from "@/generated/prisma/client";
-import { z } from 'zod';
+import { z } from "zod";
+import { dbToModelMessages, sdkToChatParts } from "@/lib/chat/converter";
+import { ChatPart } from "@/lib/chat/types";
+import { isToolResultOutput } from "@/lib/chat/toolResultOutput";
+import type { ToolResultPart } from "ai";
+
 export const maxDuration = 30;
 
 type AppUIMessage = UIMessage<unknown, { conversation_id: { id: string } }>;
-
-// Helper to map DB parts to SDK content
-function dbPartsToUserContent(dbParts: unknown): UserContent {
-    const parts = parseMessageParts(dbParts);
-    if (parts.length === 0) return "";
-    
-    return parts.map(p => {
-        // Assume text for now, as DB schema only guarantees text in this iteration
-        if (p.type === 'text') return { type: 'text', text: p.text };
-        return { type: 'text', text: '' }; 
-    });
-}
-
-function dbPartsToAssistantContent(dbParts: unknown): AssistantContent {
-    const parts = parseMessageParts(dbParts);
-    if (parts.length === 0) return "";
-    
-    return parts.map(p => {
-        if (p.type === 'text') return { type: 'text', text: p.text };
-        return { type: 'text', text: '' };
-    });
-}
 
 export async function POST(req: Request) {
   try {
     const bodyJson: unknown = await req.json();
 
+    const toolResultOutputSchema = z.custom<ToolResultPart["output"]>((v) =>
+      isToolResultOutput(v)
+    );
+
+    // IMPORTANT: ChatPart is our stable request/persist/replay schema.
+    // Greenfield contract: no legacy field names are accepted.
+    const chatPartSchema: z.ZodType<ChatPart> = z.union([
+      z.object({ type: z.literal("text"), text: z.string() }),
+      z.object({
+        type: z.literal("file"),
+        name: z.string().min(1),
+        mediaType: z.string().min(1),
+        size: z.number().int().nonnegative().optional(),
+        ref: z.string().min(1),
+      }),
+      z.object({
+        type: z.literal("tool-call"),
+        toolCallId: z.string(),
+        toolName: z.string(),
+        input: z.unknown(),
+      }),
+      z.object({
+        type: z.literal("tool-result"),
+        toolCallId: z.string(),
+        toolName: z.string(),
+        output: toolResultOutputSchema,
+        isError: z.boolean().optional(),
+      }),
+    ]);
+
     const bodySchema = z.object({
-      conversationId: z.string().uuid("Invalid conversation ID format"), // Must be UUID provided by client
-      clientMessageId: z.string().uuid(),
-      input: z.array(z.object({ type: z.literal('text'), text: z.string() })).min(1),
+      // Optional for first message; when omitted, the server lazily creates a conversation and returns its id in-stream.
+      conversationId: z.uuid().optional(),
+      clientMessageId: z.string().min(1),
+      input: z.array(chatPartSchema).min(1),
     });
 
     const parsedBody = bodySchema.safeParse(bodyJson);
     if (!parsedBody.success) {
       return Response.json(
-        { error: 'Invalid request body', details: parsedBody.error.flatten() },
-        { status: 400 },
+        { error: "Invalid request body", details: parsedBody.error.flatten() },
+        { status: 400 }
       );
     }
 
     const { conversationId, clientMessageId, input } = parsedBody.data;
     const userId = "default-user"; // TODO: Replace with real auth
 
-    // 1. Optimistic Creation / Retrieval
-    // We trust the client provided ID (after validation)
-    await ensureConversationById(conversationId, userId, clientMessageId);
-    
+    // 1. Create / Retrieve conversation (lazy-create for first message)
+    const ensuredConversation = conversationId
+      ? await ensureConversationById(conversationId, userId, clientMessageId)
+      : await ensureConversationForFirstMessage(userId, clientMessageId);
+
+    const ensuredConversationId = ensuredConversation.id;
+
     // 2. Persist User Message
-    await createMessage(conversationId, Role.user, input, clientMessageId);
+    await createMessage(
+      ensuredConversationId,
+      Role.user,
+      input,
+      clientMessageId
+    );
+    await touchConversation(ensuredConversationId, userId);
 
     // 3. Fetch Full History
-    const conversation = await getConversation(conversationId, userId);
+    const conversation = await getConversation(ensuredConversationId, userId);
     const historyMessages = conversation?.messages || [];
 
     // Generate title if this is the first message (or only one user message)
-    // Simple heuristic: if total messages <= 1 (just the one we added)
     if (historyMessages.length <= 1) {
-        const text = input
-            .filter((p) => p.type === 'text')
-            .map((p) => p.text)
-            .join('\n');
+      const isTextInputPart = (
+        p: (typeof input)[number]
+      ): p is Extract<(typeof input)[number], { type: "text" }> =>
+        p.type === "text";
+
+      const text = input
+        .filter(isTextInputPart)
+        .map((p) => p.text)
+        .join("\n");
+
+      // Only update title if we have some text content
+      if (text.length > 0) {
         const title = text.slice(0, 30);
-        await updateConversationTitle(conversationId, userId, title);
+        await updateConversationTitle(ensuredConversationId, userId, title);
+      }
     }
 
-    // 4. Convert to ModelMessage
-    const coreMessages: ModelMessage[] = historyMessages.map(m => {
-        const role = m.role;
-        
-        if (role === Role.user) {
-            return { role: 'user', content: dbPartsToUserContent(m.parts) };
-        } else if (role === Role.assistant) {
-            return { role: 'assistant', content: dbPartsToAssistantContent(m.parts) };
-        } else if (role === Role.system) {
-            const parts = parseMessageParts(m.parts);
-            const text = parts.map(p => p.text).join('\n');
-            return { role: 'system', content: text };
-        }
-        
-        return { role: 'user', content: dbPartsToUserContent(m.parts) }; 
-    });
+    // 4. Convert to ModelMessage using unified converter
+    // This handles File Ref resolution and Tool structures
+    const modelMessages = await dbToModelMessages(historyMessages);
 
     // 5. Stream
     const result = streamText({
-      model: ('google/gemini-2.0-flash'),
-      messages: coreMessages,
-      onFinish: async ({ text }) => {
-        waitUntil((async () => {
+      model: "google/gemini-2.0-flash",
+      messages: modelMessages,
+      onFinish: async ({ content }) => {
+        waitUntil(
+          (async () => {
             try {
-                const parts = textToParts(text);
-                await createMessage(conversationId, Role.assistant, parts);
-                await touchConversation(conversationId, userId);
+              // Use converter to map SDK output (content parts) back to ChatPart[]
+              const parts = sdkToChatParts(content);
+              await createMessage(ensuredConversationId, Role.assistant, parts);
+              await touchConversation(ensuredConversationId, userId);
             } catch (error) {
-                console.error("Failed to persist assistant message:", error);
+              console.error("Failed to persist assistant message:", error);
             }
-        })());
+          })()
+        );
       },
     });
 
     const stream = createUIMessageStream<AppUIMessage>({
       execute: ({ writer }) => {
-        writer.write({ type: 'start' });
-        // We still send the ID for confirmation, though client already has it
+        writer.write({ type: "start" });
+        // Always send the confirmed conversation id (especially important for lazy-create first message).
         writer.write({
-          type: 'data-conversation_id',
-          data: { id: conversationId },
+          type: "data-conversation_id",
+          data: { id: ensuredConversationId },
           transient: true,
         });
-        writer.merge(result.toUIMessageStream<AppUIMessage>({ sendStart: false }));
+        writer.merge(
+          result.toUIMessageStream<AppUIMessage>({ sendStart: false })
+        );
       },
-      onError: () => 'An error occurred.',
+      onError: () => "An error occurred.",
     });
 
     return createUIMessageStreamResponse({
       stream,
       headers: {
         ...UI_MESSAGE_STREAM_HEADERS,
-        'x-conversation-id': conversationId,
+        "x-conversation-id": ensuredConversationId,
       },
     });
-
   } catch (err) {
     console.error("POST /api/chat failed:", err);
     return Response.json({ error: String(err) }, { status: 500 });
