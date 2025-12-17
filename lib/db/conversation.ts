@@ -10,11 +10,18 @@ export async function createConversation(userId: string, firstClientMessageId?: 
   });
 }
 
-export async function ensureConversationById(id: string, userId: string, firstClientMessageId: string) {
+export async function ensureConversationById(
+  id: string,
+  userId: string,
+  firstClientMessageId: string
+) {
     // Optimistic ID creation
     // If it exists, return it. If not, create it with the provided ID.
     const existing = await prisma.conversation.findUnique({ where: { id } });
     if (existing) {
+        // Deleted conversations are treated as not found.
+        if (existing.deletedAt) return null;
+
         // Simple ownership check
         if (existing.userId !== userId) {
             // In a real app with auth, this should probably be a 403 or handled gracefully
@@ -36,7 +43,7 @@ export async function ensureConversationById(id: string, userId: string, firstCl
     } catch (err) {
         // Handle race condition where it was created between find and create
         const retry = await prisma.conversation.findUnique({ where: { id } });
-        if (retry) return retry;
+        if (retry) return retry.deletedAt ? null : retry;
         throw err;
     }
 }
@@ -48,7 +55,7 @@ export async function ensureConversationForFirstMessage(userId: string, firstCli
   const existing = await prisma.conversation.findFirst({
     where: { userId, firstClientMessageId },
   });
-  if (existing) return existing;
+  if (existing) return existing.deletedAt ? null : existing;
 
   try {
     return await prisma.conversation.create({
@@ -63,44 +70,76 @@ export async function ensureConversationForFirstMessage(userId: string, firstCli
     const retry = await prisma.conversation.findFirst({
       where: { userId, firstClientMessageId },
     });
-    if (retry) return retry;
+    if (retry) return retry.deletedAt ? null : retry;
     throw err;
   }
 }
 
 export async function getConversation(id: string, userId: string) {
-  return prisma.conversation.findUnique({
-    where: { id, userId },
-    include: { messages: { orderBy: { createdAt: "asc" } } },
+  return prisma.conversation.findFirst({
+    where: { id, userId, deletedAt: null },
+    include: {
+      messages: {
+        where: { deletedAt: null },
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 }
 
 export async function updateConversationTitle(id: string, userId: string, title: string) {
+  const existing = await prisma.conversation.findFirst({
+    where: { id, userId, deletedAt: null },
+  });
+  if (!existing) return null;
+
   return prisma.conversation.update({
-    where: { id, userId },
+    where: { id },
     data: { title },
   });
 }
 
 export async function touchConversation(id: string, userId: string) {
+    const existing = await prisma.conversation.findFirst({
+      where: { id, userId, deletedAt: null },
+    });
+    if (!existing) return null;
+
     return prisma.conversation.update({
-        where: { id, userId },
+        where: { id },
         data: { updatedAt: new Date() }
     });
 }
 
 export async function deleteConversation(id: string, userId: string) {
-    return prisma.conversation.delete({
-        where: { id, userId }
+    const existing = await prisma.conversation.findFirst({
+      where: { id, userId, deletedAt: null },
     });
+    if (!existing) return null;
+
+    const deletedAt = new Date();
+
+    await prisma.$transaction([
+      prisma.message.updateMany({
+        where: { conversationId: id, deletedAt: null },
+        data: { deletedAt },
+      }),
+      prisma.conversation.update({
+        where: { id },
+        data: { deletedAt },
+      }),
+    ]);
+
+    return { ...existing, deletedAt };
 }
 
 export async function getUserConversations(userId: string) {
     return prisma.conversation.findMany({
-        where: { userId },
+        where: { userId, deletedAt: null },
         orderBy: { updatedAt: "desc" },
         include: {
              messages: {
+                 where: { deletedAt: null },
                  take: 1,
                  orderBy: { createdAt: "desc" }
              }

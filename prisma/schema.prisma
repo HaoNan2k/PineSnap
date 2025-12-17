@@ -21,6 +21,7 @@ model Conversation {
   firstClientMessageId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   messages  Message[]
 
@@ -31,7 +32,7 @@ model Conversation {
 model Message {
   id             String       @id @default(uuid(7))
   conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
 
   role           Role     @default(user)
   // Idempotency key from the client for this message (used to dedupe retries)
@@ -40,6 +41,7 @@ model Message {
   parts          Json         @default("[]") // Structured content
   parentMessageId String?
   createdAt      DateTime     @default(now())
+  deletedAt      DateTime?
 
   @@index([conversationId])
   @@unique([conversationId, clientMessageId])

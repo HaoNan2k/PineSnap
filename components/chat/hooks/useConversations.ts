@@ -53,9 +53,6 @@ function mapConversation(apiConv: ApiConversation): Conversation {
 export function useConversations() {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  // activeConversationId is now managed by URL (page params), but we keep it here if needed for selection sync
-  // Actually, we don't strictly need it in state anymore if we pass it in from layout.
-  // But let's keep it simple: this hook manages list data.
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -75,8 +72,6 @@ export function useConversations() {
     }
     load();
   }, []);
-
-  // Removed: loadDetail effect (Server Components handle this now)
 
   // --- Derived State ---
   const sortedConversations = useMemo(() => {

@@ -17,6 +17,8 @@ export function ChatLayoutWrapper({ children }: { children: React.ReactNode }) {
     searchQuery,
     setSearchQuery,
     newChat,
+    renameConversation,
+    deleteConversation,
   } = useConversations();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -38,6 +40,8 @@ export function ChatLayoutWrapper({ children }: { children: React.ReactNode }) {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
+          onRename={renameConversation}
+          onDelete={deleteConversation}
         />
       }
       chatArea={children}

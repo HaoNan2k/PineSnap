@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ChatPart } from "@/lib/chat/types";
 import { Attachment } from "@/components/chat/components/PreviewAttachment";
+import { isRecord } from "@/lib/utils";
 
 interface ChatAreaProps {
   initialConversationId?: string;
@@ -43,10 +44,6 @@ function hasContent(m: unknown): m is { content: string } {
 
 function hasCreatedAt(m: unknown): m is { createdAt: Date | number | string } {
   return typeof m === "object" && m !== null && "createdAt" in m;
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
 }
 
 function getFileRefFromProviderMetadata(meta: unknown): string | undefined {

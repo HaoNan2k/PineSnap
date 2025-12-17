@@ -1,40 +1,21 @@
-import type { JSONValue } from "ai";
+import { JsonValue } from "@/generated/prisma/internal/prismaNamespace";
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-export function cn(...inputs: (string | undefined | null | false)[]) {
-  return inputs.filter(Boolean).join(" ")
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function safeStringify(v: unknown): string {
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
+export function isJsonValue(value: unknown): value is JsonValue {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && value !== undefined;
 }
 
-export function isJsonValue(v: unknown, depth = 0): v is JSONValue {
-  // Minimal JSONValue validator with depth cap (avoids cycles by not traversing objects too deeply).
-  if (depth > 20) return false;
-  if (
-    v === null ||
-    typeof v === "string" ||
-    typeof v === "number" ||
-    typeof v === "boolean"
-  ) {
-    return true;
-  }
-  if (Array.isArray(v)) {
-    return v.every((x) => isJsonValue(x, depth + 1));
-  }
-  if (isRecord(v)) {
-    for (const k of Object.keys(v)) {
-      if (!isJsonValue(v[k], depth + 1)) return false;
-    }
-    return true;
-  }
-  return false;
+export function safeStringify(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (isJsonValue(value)) return JSON.stringify(value);
+  return String(value);
 }

@@ -38,6 +38,12 @@ export async function PATCH(
     const { title } = body;
 
     const conversation = await updateConversationTitle(id, TEMP_USER_ID, title);
+    if (!conversation) {
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json(conversation);
   } catch (error) {
@@ -55,7 +61,13 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    await deleteConversation(id, TEMP_USER_ID);
+    const deleted = await deleteConversation(id, TEMP_USER_ID);
+    if (!deleted) {
+      return NextResponse.json(
+        { error: "Conversation not found" },
+        { status: 404 }
+      );
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to delete conversation:", error);

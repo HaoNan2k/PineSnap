@@ -82,6 +82,10 @@ export async function POST(req: Request) {
       ? await ensureConversationById(conversationId, userId, clientMessageId)
       : await ensureConversationForFirstMessage(userId, clientMessageId);
 
+    if (!ensuredConversation) {
+      return Response.json({ error: "Conversation not found" }, { status: 404 });
+    }
+
     const ensuredConversationId = ensuredConversation.id;
 
     // 2. Persist User Message
