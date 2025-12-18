@@ -30,11 +30,11 @@ export function groupByRecency(conversations: Conversation[]): ConversationGroup
   }
 
   const groups: ConversationGroup[] = [];
-  if (today.length) groups.push({ id: "today", label: "Today", items: today });
+  if (today.length) groups.push({ id: "today", label: "今天", items: today });
   if (thisWeek.length)
-    groups.push({ id: "this_week", label: "This Week", items: thisWeek });
+    groups.push({ id: "this_week", label: "本周", items: thisWeek });
   if (earlier.length)
-    groups.push({ id: "earlier", label: "Earlier", items: earlier });
+    groups.push({ id: "earlier", label: "更早", items: earlier });
 
   return groups;
 }

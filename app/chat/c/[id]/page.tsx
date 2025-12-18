@@ -20,6 +20,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <div className="flex flex-col h-full w-full">
       <ChatArea 
+        key={id}
         initialConversationId={id}
         initialMessages={uiMessages} 
         title={conversation.title || "Chat"} 

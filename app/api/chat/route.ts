@@ -23,7 +23,10 @@ import type { ToolResultPart } from "ai";
 
 export const maxDuration = 30;
 
-type AppUIMessage = UIMessage<unknown, { conversation_id: { id: string } }>;
+type AppUIMessage = UIMessage<unknown, {
+  conversationId: { id: string };
+  titleUpdated: { id: string; title: string };
+}>;
 
 export async function POST(req: Request) {
   try {
@@ -102,6 +105,7 @@ export async function POST(req: Request) {
     const historyMessages = conversation?.messages || [];
 
     // Generate title if this is the first message (or only one user message)
+    let newTitle: string | null = null;
     if (historyMessages.length <= 1) {
       const isTextInputPart = (
         p: (typeof input)[number]
@@ -117,6 +121,7 @@ export async function POST(req: Request) {
       if (text.length > 0) {
         const title = text.slice(0, 30);
         await updateConversationTitle(ensuredConversationId, userId, title);
+        newTitle = title;
       }
     }
 
@@ -149,10 +154,18 @@ export async function POST(req: Request) {
         writer.write({ type: "start" });
         // Always send the confirmed conversation id (especially important for lazy-create first message).
         writer.write({
-          type: "data-conversation_id",
+          type: "data-conversationId",
           data: { id: ensuredConversationId },
           transient: true,
         });
+        // Send title update notification to trigger sidebar refresh
+        if (newTitle) {
+          writer.write({
+            type: "data-titleUpdated",
+            data: { id: ensuredConversationId, title: newTitle },
+            transient: true,
+          });
+        }
         writer.merge(
           result.toUIMessageStream<AppUIMessage>({ sendStart: false })
         );

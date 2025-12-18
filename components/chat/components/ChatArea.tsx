@@ -19,6 +19,7 @@ import {
 import { ChatPart } from "@/lib/chat/types";
 import { Attachment } from "@/components/chat/components/PreviewAttachment";
 import { isRecord } from "@/lib/utils";
+import { useDataStream } from "@/components/data-stream-provider";
 
 interface ChatAreaProps {
   initialConversationId?: string;
@@ -57,8 +58,9 @@ function getFileRefFromProviderMetadata(meta: unknown): string | undefined {
 export const ChatArea = ({
   initialConversationId,
   initialMessages,
-  title = "New Chat",
+  title = "新对话",
 }: ChatAreaProps) => {
+  const { setDataStream } = useDataStream();
   const [conversationId, setConversationId] = useState<string | undefined>(
     initialConversationId
   );
@@ -71,13 +73,13 @@ export const ChatArea = ({
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-      api: "/api/chat",
+        api: "/api/chat",
         prepareSendMessagesRequest: ({ messages: currentMessages }) => {
-        const last = currentMessages[currentMessages.length - 1];
+          const last = currentMessages[currentMessages.length - 1];
           const clientMessageId = last.id;
 
           const input: ChatPart[] = [];
-        if (last.parts && last.parts.length > 0) {
+          if (last.parts && last.parts.length > 0) {
             for (const p of last.parts) {
               if (p.type === "text") {
                 input.push({ type: "text", text: p.text });
@@ -100,19 +102,19 @@ export const ChatArea = ({
                 }
               }
             }
-        } else if (hasContent(last)) {
+          } else if (hasContent(last)) {
             input.push({ type: "text", text: last.content });
-        }
+          }
 
-        return {
-          body: {
+          return {
+            body: {
               ...(conversationId ? { conversationId } : {}),
               clientMessageId,
-            input,
-          },
-        };
-      },
-    }),
+              input,
+            },
+          };
+        },
+      }),
     [conversationId]
   );
 
@@ -121,23 +123,43 @@ export const ChatArea = ({
     messages: initialMessages,
     transport,
     dataPartSchemas: {
-      conversation_id: z.object({ id: z.string() }),
+      conversationId: z.object({ id: z.string() }),
+      titleUpdated: z.object({ id: z.string(), title: z.string() }),
     },
     onData: (dataPart) => {
-      if (dataPart.type !== "data-conversation_id") return;
-      if (!isRecord(dataPart.data) || typeof dataPart.data.id !== "string")
-        return;
-      const id = dataPart.data.id;
-      setConversationId((prev) => prev ?? id);
-       window.history.replaceState({}, "", `/chat/c/${id}`);
+      if (dataPart.type === "data-conversationId") {
+        if (!isRecord(dataPart.data) || typeof dataPart.data.id !== "string")
+          return;
+        const id = dataPart.data.id;
+        setConversationId((prev) => prev ?? id);
+        window.history.replaceState({}, "", `/chat/c/${id}`);
+      } else if (dataPart.type === "data-titleUpdated") {
+        // Push to data stream for sidebar handler
+        const data = dataPart.data;
+        if (
+          isRecord(data) &&
+          typeof data.id === "string" &&
+          typeof data.title === "string"
+        ) {
+          const id = data.id;
+          const title = data.title;
+          setDataStream((prev) => [
+            ...prev,
+            {
+              type: "data-titleUpdated" as const,
+              data: { id, title },
+            },
+          ]);
+        }
+      }
     },
   });
 
   const mappedMessages = useMemo(
     () =>
       messages.map((m) => {
-      let content = "";
-      if (m.parts && m.parts.length > 0) {
+        let content = "";
+        if (m.parts && m.parts.length > 0) {
           const texts = m.parts
             .filter(
               (p): p is Extract<typeof p, { type: "text" }> => p.type === "text"
@@ -150,12 +172,12 @@ export const ChatArea = ({
             .map((p) => `📎 ${p.filename ?? "文件"}`);
 
           content = [...texts, ...files].join("\n");
-      } else if (hasContent(m)) {
+        } else if (hasContent(m)) {
           content = m.content;
-      }
+        }
 
-      let createdAt = new Date();
-      if (hasCreatedAt(m)) {
+        let createdAt = new Date();
+        if (hasCreatedAt(m)) {
           createdAt =
             m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt);
         } else if (
@@ -170,23 +192,29 @@ export const ChatArea = ({
           createdAt = new Date(
             (m as { metadata: { createdAt: string } }).metadata.createdAt
           );
-      }
+        }
 
-      return {
+        return {
           id: m.id,
           role: m.role as "user" | "assistant" | "system",
           content: content,
           createdAt: createdAt,
-      };
+        };
       }),
     [messages]
   );
 
   const handleSend = async (content: string, attachments: Attachment[]) => {
     if (isChatBusy(status)) return;
-    
+
     // Construct FileUIParts from attachments
-    const fileParts: FileUIPart[] = attachments.map((att) => ({
+    const filteredAttachments = attachments.filter((att) => {
+      if (att.ref) return true;
+      if (typeof att.url !== "string") return false;
+      return !att.url.startsWith("data:");
+    });
+
+    const fileParts: FileUIPart[] = filteredAttachments.map((att) => ({
       type: "file",
       mediaType: att.mediaType ?? "application/octet-stream",
       url: att.url,
@@ -197,6 +225,10 @@ export const ChatArea = ({
     const textPart = content.trim()
       ? [{ type: "text" as const, text: content }]
       : [];
+
+    if (textPart.length === 0 && fileParts.length === 0) {
+      return;
+    }
 
     await sendMessage({
       role: "user",

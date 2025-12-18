@@ -4,7 +4,7 @@ export async function createConversation(userId: string, firstClientMessageId?: 
   return prisma.conversation.create({
     data: {
       userId,
-      title: "New Chat",
+      title: "新对话",
       firstClientMessageId: firstClientMessageId ?? null,
     },
   });
@@ -36,7 +36,7 @@ export async function ensureConversationById(
             data: {
                 id, // Use the client-provided UUID
                 userId,
-                title: "New Chat",
+                title: "新对话",
                 firstClientMessageId
             }
         });
@@ -61,7 +61,7 @@ export async function ensureConversationForFirstMessage(userId: string, firstCli
     return await prisma.conversation.create({
       data: {
         userId,
-        title: "New Chat",
+        title: "新对话",
         firstClientMessageId,
       },
     });

@@ -61,7 +61,7 @@ export const MessageList = ({
               messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }}
           >
-            Jump to bottom
+            回到底部
           </button>
         </div>
       ) : null}

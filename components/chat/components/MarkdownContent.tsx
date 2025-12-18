@@ -19,11 +19,11 @@ function CopyButton({ value }: { value: string }) {
           // ignore
         }
       }}
-      aria-label="Copy"
-      title="Copy"
+      aria-label="复制"
+      title="复制"
     >
       <Copy size={14} />
-      <span className="select-none">{copied ? "Copied" : "Copy"}</span>
+      <span className="select-none">{copied ? "已复制" : "复制"}</span>
     </button>
   );
 }
@@ -75,7 +75,7 @@ export function MarkdownContent({ content }: { content: string }) {
               <div className="rounded-lg border border-border bg-surface overflow-hidden">
                 <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                   <div className="text-xs text-fg-faint truncate">
-                    {className?.replace("language-", "") ?? "code"}
+                    {className?.replace("language-", "") ?? "代码"}
                   </div>
                   <CopyButton value={raw.replace(/\n$/, "")} />
                 </div>

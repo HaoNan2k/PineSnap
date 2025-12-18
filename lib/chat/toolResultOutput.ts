@@ -1,11 +1,11 @@
 import type { ToolResultPart } from "ai";
-import { isRecord, isJsonValue, safeStringify } from "@/lib/utils";
+import { isRecord, isJsonObject, safeStringify } from "@/lib/utils";
 
 export type ToolResultOutput = ToolResultPart["output"];
 
 export function toToolResultOutput(output: unknown): ToolResultOutput {
   if (typeof output === "string") return { type: "text", value: output };
-  if (isJsonValue(output)) return { type: "json", value: output };
+  if (isJsonObject(output)) return { type: "json", value: output };
   return { type: "text", value: safeStringify(output) };
 }
 
@@ -19,7 +19,7 @@ export function isToolResultOutput(v: unknown): v is ToolResultOutput {
   }
 
   if (type === "json" || type === "error-json") {
-    return isJsonValue(v["value"]);
+    return isJsonObject(v["value"]);
   }
 
   if (type === "execution-denied") {

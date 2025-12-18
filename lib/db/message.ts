@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { Prisma, Role } from "@/generated/prisma/client";
 import { ChatPart } from "@/lib/chat/types";
 
+const isTextPart = (p: ChatPart): p is Extract<ChatPart, { type: "text" }> =>
+  p.type === "text";
+
 export async function createMessage(
   conversationId: string,
   role: Role,
@@ -10,9 +13,9 @@ export async function createMessage(
 ) {
   // Compute fallback content
   const content = parts
-    .filter(p => p.type === 'text')
-    .map(p => p.text)
-    .join('\n');
+    .filter(isTextPart)
+    .map((p) => p.text)
+    .join("\n");
 
   if (clientMessageId) {
     // Idempotent for user messages (and any caller-provided key):
@@ -45,7 +48,7 @@ export async function createMessage(
       conversationId,
       role,
       parts: parts as unknown as Prisma.InputJsonValue, // Safe cast to Json compatible type
-      content, 
+      content,
     },
   });
 }
