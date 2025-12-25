@@ -1,4 +1,5 @@
 import { JsonValue } from "@/generated/prisma/internal/prismaNamespace";
+import { v4 as uuidv4 } from "uuid";
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -27,5 +28,5 @@ export function safeStringify(value: unknown): string {
 }
 
 export function generateUUID(): string {
-  return crypto.randomUUID();
+  return uuidv4();
 }

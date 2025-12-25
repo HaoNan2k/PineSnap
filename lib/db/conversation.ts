@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { logWarn } from "@/lib/logger";
 
 export async function createConversation(userId: string, firstClientMessageId?: string) {
   return prisma.conversation.create({
@@ -22,11 +23,10 @@ export async function ensureConversationById(
         // Deleted conversations are treated as not found.
         if (existing.deletedAt) return null;
 
-        // Simple ownership check
+        // Ownership check: do NOT leak existence across users.
         if (existing.userId !== userId) {
-            // In a real app with auth, this should probably be a 403 or handled gracefully
-            // For now with default-user, this branch is unlikely unless collision
-            console.warn(`Conversation ${id} exists but userId mismatch. Expected ${userId}, got ${existing.userId}`);
+            logWarn(`Conversation id collision or unauthorized access attempt for id=${id}`);
+            return null;
         }
         return existing;
     }
@@ -43,7 +43,11 @@ export async function ensureConversationById(
     } catch (err) {
         // Handle race condition where it was created between find and create
         const retry = await prisma.conversation.findUnique({ where: { id } });
-        if (retry) return retry.deletedAt ? null : retry;
+        if (retry) {
+            if (retry.deletedAt) return null;
+            if (retry.userId !== userId) return null;
+            return retry;
+        }
         throw err;
     }
 }

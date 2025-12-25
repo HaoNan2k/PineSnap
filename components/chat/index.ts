@@ -1,9 +1,7 @@
-export { ChatArea } from "@/components/chat/components/ChatArea";
+export { ChatArea } from "@/components/chat/components/chat-area";
 
-export { AssistantTypingIndicator } from "@/components/chat/components/AssistantTypingIndicator";
-export { MessageInput } from "@/components/chat/components/MessageInput";
-export { MessageList } from "@/components/chat/components/MessageList";
-export { MessageRow } from "@/components/chat/components/MessageRow";
+export { AssistantTypingIndicator } from "@/components/chat/components/assistant-typing-indicator";
+export { MessageList } from "@/components/chat/components/message-list";
 
 export type { Conversation, Message, ConversationGroup } from "@/components/chat/types";
 export { ChatStatus, isChatBusy } from "@/components/chat/types";

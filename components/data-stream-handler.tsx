@@ -20,7 +20,7 @@ export function DataStreamHandler() {
 
     for (const delta of newDeltas) {
       // Handle chat title updates - trigger sidebar refresh
-      if (delta.type === "data-titleUpdated") {
+      if (delta.type === "data-titleUpdated" || delta.type === "data-conversationId") {
         shouldRefreshConversations = true;
         continue;
       }

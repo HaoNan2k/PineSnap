@@ -10,8 +10,8 @@ import {
 import { ChatPart } from "./types";
 import { parseMessageParts } from "./utils";
 import { fileStorage } from "@/lib/storage";
-import { fileContentResolver } from "@/lib/files/contentResolver";
-import { toToolResultOutput } from "./toolResultOutput";
+import { fileContentResolver } from "@/lib/files/content-resolver";
+import { toToolResultOutput } from "./tool-result-output";
 
 // --- DB -> Model (Context Construction) ---
 

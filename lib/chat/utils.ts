@@ -1,5 +1,5 @@
 import { ChatPart } from "./types";
-import { isToolResultOutput } from "./toolResultOutput";
+import { isToolResultOutput } from "./tool-result-output";
 import { isRecord } from "@/lib/utils";
 
 function asNonEmptyString(v: unknown): string | null {

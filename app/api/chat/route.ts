@@ -18,8 +18,9 @@ import { Role } from "@/generated/prisma/client";
 import { z } from "zod";
 import { dbToModelMessages, sdkToChatParts } from "@/lib/chat/converter";
 import { ChatPart } from "@/lib/chat/types";
-import { isToolResultOutput } from "@/lib/chat/toolResultOutput";
+import { isToolResultOutput } from "@/lib/chat/tool-result-output";
 import type { ToolResultPart } from "ai";
+import { logError } from "@/lib/logger";
 
 export const maxDuration = 30;
 
@@ -142,7 +143,7 @@ export async function POST(req: Request) {
               await createMessage(ensuredConversationId, Role.assistant, parts);
               await touchConversation(ensuredConversationId, userId);
             } catch (error) {
-              console.error("Failed to persist assistant message:", error);
+              logError("Failed to persist assistant message", error);
             }
           })()
         );
@@ -181,7 +182,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
-    console.error("POST /api/chat failed:", err);
+    logError("POST /api/chat failed", err);
     return Response.json({ error: String(err) }, { status: 500 });
   }
 }

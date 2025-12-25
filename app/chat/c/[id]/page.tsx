@@ -1,15 +1,15 @@
 import { notFound } from "next/navigation";
 import { getConversation } from "@/lib/db/conversation";
 import { convertDbToUIMessages } from "@/lib/chat/converter";
-import { ChatArea } from "@/components/chat/components/ChatArea";
+import { ChatArea } from "@/components/chat/components/chat-area";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: conversationId } = await params;
   
   // TODO: Replace with real user ID from auth
   const userId = "default-user";
   
-  const conversation = await getConversation(id, userId);
+  const conversation = await getConversation(conversationId, userId);
   
   if (!conversation) {
     notFound();
@@ -18,13 +18,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const uiMessages = await convertDbToUIMessages(conversation.messages);
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <ChatArea 
-        key={id}
-        initialConversationId={id}
-        initialMessages={uiMessages} 
-        title={conversation.title || "Chat"} 
-      />
-    </div>
+    <ChatArea
+      conversationId={conversationId}
+      title={conversation.title || "Chat"}
+      initialMessages={uiMessages}
+    />
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fileStorage } from "@/lib/storage";
-import { mediaTypeResolver } from "@/lib/files/mediaType";
+import { mediaTypeResolver } from "@/lib/files/media-type";
+import { logError } from "@/lib/logger";
 
 export async function POST(request: Request) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       size: buffer.byteLength,
     });
   } catch (error) {
-    console.error("Upload failed:", error);
+    logError("Upload failed", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

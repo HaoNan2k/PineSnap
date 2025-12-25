@@ -1,4 +1,4 @@
-import type { ToolResultOutput } from "./toolResultOutput";
+import type { ToolResultOutput } from "./tool-result-output";
 
 export type ChatTextPart = {
   type: "text";
