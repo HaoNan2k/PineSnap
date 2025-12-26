@@ -1,26 +1,30 @@
 import { notFound } from "next/navigation";
-import { getConversation } from "@/lib/db/conversation";
+import { forbidden, unauthorized } from "next/navigation";
+import { getConversationWithAccessCheck } from "@/lib/db/conversation";
 import { convertDbToUIMessages } from "@/lib/chat/converter";
 import { ChatArea } from "@/components/chat/components/chat-area";
+import { getAuthenticatedUserId } from "@/lib/supabase/auth";
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id: conversationId } = await params;
-  
-  // TODO: Replace with real user ID from auth
-  const userId = "default-user";
-  
-  const conversation = await getConversation(conversationId, userId);
-  
-  if (!conversation) {
-    notFound();
+
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    unauthorized();
   }
 
-  const uiMessages = await convertDbToUIMessages(conversation.messages);
+  const result = await getConversationWithAccessCheck(conversationId, userId);
+  if (!result.ok) {
+    if (result.status === 404) notFound();
+    forbidden();
+  }
+
+  const uiMessages = await convertDbToUIMessages(result.conversation.messages);
 
   return (
     <ChatArea
       conversationId={conversationId}
-      title={conversation.title || "Chat"}
+      title={result.conversation.title || "Chat"}
       initialMessages={uiMessages}
     />
   );

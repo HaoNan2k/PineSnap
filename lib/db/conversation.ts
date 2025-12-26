@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logWarn } from "@/lib/logger";
+import type { Conversation } from "@/generated/prisma/client";
 
 export async function createConversation(userId: string, firstClientMessageId?: string) {
   return prisma.conversation.create({
@@ -11,28 +12,53 @@ export async function createConversation(userId: string, firstClientMessageId?: 
   });
 }
 
+export type ConversationAccessResult =
+  | { ok: true; conversation: NonNullable<Awaited<ReturnType<typeof getConversation>>> }
+  | { ok: false; status: 403 | 404 };
+
+export async function getConversationWithAccessCheck(
+  id: string,
+  userId: string
+): Promise<ConversationAccessResult> {
+  const meta = await prisma.conversation.findUnique({
+    where: { id },
+    select: { userId: true, deletedAt: true },
+  });
+
+  if (!meta || meta.deletedAt) return { ok: false, status: 404 };
+  if (meta.userId !== userId) return { ok: false, status: 403 };
+
+  const conversation = await getConversation(id, userId);
+  if (!conversation) return { ok: false, status: 404 };
+  return { ok: true, conversation };
+}
+
+export type EnsureConversationByIdResult =
+  | { ok: true; conversation: Conversation }
+  | { ok: false; status: 403 | 404 };
+
 export async function ensureConversationById(
   id: string,
   userId: string,
   firstClientMessageId: string
-) {
+): Promise<EnsureConversationByIdResult> {
     // Optimistic ID creation
     // If it exists, return it. If not, create it with the provided ID.
     const existing = await prisma.conversation.findUnique({ where: { id } });
     if (existing) {
         // Deleted conversations are treated as not found.
-        if (existing.deletedAt) return null;
+        if (existing.deletedAt) return { ok: false, status: 404 };
 
-        // Ownership check: do NOT leak existence across users.
+        // Ownership check: this change intentionally returns 403 (leaks existence) per spec.
         if (existing.userId !== userId) {
             logWarn(`Conversation id collision or unauthorized access attempt for id=${id}`);
-            return null;
+            return { ok: false, status: 403 };
         }
-        return existing;
+        return { ok: true, conversation: existing };
     }
 
     try {
-        return await prisma.conversation.create({
+        const created = await prisma.conversation.create({
             data: {
                 id, // Use the client-provided UUID
                 userId,
@@ -40,13 +66,14 @@ export async function ensureConversationById(
                 firstClientMessageId
             }
         });
+        return { ok: true, conversation: created };
     } catch (err) {
         // Handle race condition where it was created between find and create
         const retry = await prisma.conversation.findUnique({ where: { id } });
         if (retry) {
-            if (retry.deletedAt) return null;
-            if (retry.userId !== userId) return null;
-            return retry;
+            if (retry.deletedAt) return { ok: false, status: 404 };
+            if (retry.userId !== userId) return { ok: false, status: 403 };
+            return { ok: true, conversation: retry };
         }
         throw err;
     }

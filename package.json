@@ -17,6 +17,8 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.89.0",
     "@vercel/functions": "^3.3.4",
     "ai": "6.0.0-beta.141",
     "class-variance-authority": "^0.7.1",

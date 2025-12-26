@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -14,37 +8,33 @@ datasource db {
 }
 
 model Conversation {
-  id        String   @id @default(uuid(7))
-  title     String   @default("New Chat")
-  userId    String
-  // Idempotency key for the first user message (used for lazy-create retries)
+  id                   String    @id @default(uuid(7))
+  title                String    @default("New Chat")
+  userId               String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
   firstClientMessageId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  deletedAt            DateTime?
+  messages             Message[]
 
-  messages  Message[]
-
-  @@index([userId])
   @@unique([userId, firstClientMessageId])
+  @@index([userId])
 }
 
 model Message {
-  id             String       @id @default(uuid(7))
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-
-  role           Role     @default(user)
-  // Idempotency key from the client for this message (used to dedupe retries)
-  clientMessageId String?
-  content        String       @db.Text
-  parts          Json         @default("[]") // Structured content
+  id              String       @id @default(uuid(7))
+  conversationId  String
+  content         String
   parentMessageId String?
-  createdAt      DateTime     @default(now())
-  deletedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  role            Role         @default(user)
+  clientMessageId String?
+  parts           Json         @default("[]")
+  deletedAt       DateTime?
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
 
-  @@index([conversationId])
   @@unique([conversationId, clientMessageId])
+  @@index([conversationId])
 }
 
 enum Role {

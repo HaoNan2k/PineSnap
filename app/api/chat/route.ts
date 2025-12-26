@@ -21,6 +21,7 @@ import { ChatPart } from "@/lib/chat/types";
 import { isToolResultOutput } from "@/lib/chat/tool-result-output";
 import type { ToolResultPart } from "ai";
 import { logError } from "@/lib/logger";
+import { requireUserId } from "@/lib/http/api";
 
 export const maxDuration = 30;
 
@@ -79,15 +80,44 @@ export async function POST(req: Request) {
     }
 
     const { conversationId, clientMessageId, input } = parsedBody.data;
-    const userId = "default-user"; // TODO: Replace with real auth
+    const auth = await requireUserId();
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
+
+    const ensureConversation = async (): Promise<
+      | { ok: true; id: string }
+      | { ok: false; status: 403 | 404 }
+    > => {
+      if (conversationId) {
+        const result = await ensureConversationById(
+          conversationId,
+          userId,
+          clientMessageId
+        );
+        if (!result.ok) return result;
+        return { ok: true, id: result.conversation.id };
+      }
+
+      const conversation = await ensureConversationForFirstMessage(
+        userId,
+        clientMessageId
+      );
+      if (!conversation) return { ok: false, status: 404 };
+      return { ok: true, id: conversation.id };
+    };
 
     // 1. Create / Retrieve conversation (lazy-create for first message)
-    const ensuredConversation = conversationId
-      ? await ensureConversationById(conversationId, userId, clientMessageId)
-      : await ensureConversationForFirstMessage(userId, clientMessageId);
-
-    if (!ensuredConversation) {
-      return Response.json({ error: "Conversation not found" }, { status: 404 });
+    const ensuredConversation = await ensureConversation();
+    if (!ensuredConversation.ok) {
+      return Response.json(
+        {
+          error:
+            ensuredConversation.status === 403
+              ? "Forbidden"
+              : "Conversation not found",
+        },
+        { status: ensuredConversation.status }
+      );
     }
 
     const ensuredConversationId = ensuredConversation.id;
@@ -103,6 +133,9 @@ export async function POST(req: Request) {
 
     // 3. Fetch Full History
     const conversation = await getConversation(ensuredConversationId, userId);
+    if (!conversation) {
+      return Response.json({ error: "Conversation not found" }, { status: 404 });
+    }
     const historyMessages = conversation?.messages || [];
 
     // Generate title if this is the first message (or only one user message)

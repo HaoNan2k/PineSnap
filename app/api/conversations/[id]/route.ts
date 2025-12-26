@@ -1,8 +1,6 @@
-import { NextResponse } from "next/server";
-import { getConversation, updateConversationTitle, deleteConversation } from "@/lib/db/conversation";
+import { getConversationWithAccessCheck, updateConversationTitle, deleteConversation } from "@/lib/db/conversation";
 import { logError } from "@/lib/logger";
-
-const TEMP_USER_ID = "default-user";
+import { jsonError, requireUserId } from "@/lib/http/api";
 
 export async function GET(
   request: Request,
@@ -10,19 +8,22 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const conversation = await getConversation(id, TEMP_USER_ID);
+    const auth = await requireUserId();
+    if (!auth.ok) return auth.response;
 
-    if (!conversation) {
-      return NextResponse.json(
-        { error: "Conversation not found" },
-        { status: 404 }
+    const result = await getConversationWithAccessCheck(id, auth.userId);
+
+    if (!result.ok) {
+      return jsonError(
+        result.status,
+        result.status === 403 ? "Forbidden" : "Conversation not found"
       );
     }
 
-    return NextResponse.json(conversation);
+    return Response.json(result.conversation);
   } catch (error) {
     logError("Failed to fetch conversation", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to fetch conversation" },
       { status: 500 }
     );
@@ -35,21 +36,29 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
-    const body = await request.json();
-    const { title } = body;
+    const auth = await requireUserId();
+    if (!auth.ok) return auth.response;
 
-    const conversation = await updateConversationTitle(id, TEMP_USER_ID, title);
-    if (!conversation) {
-      return NextResponse.json(
-        { error: "Conversation not found" },
-        { status: 404 }
+    const access = await getConversationWithAccessCheck(id, auth.userId);
+    if (!access.ok) {
+      return jsonError(
+        access.status,
+        access.status === 403 ? "Forbidden" : "Conversation not found"
       );
     }
 
-    return NextResponse.json(conversation);
+    const body = await request.json();
+    const { title } = body;
+
+    const conversation = await updateConversationTitle(id, auth.userId, title);
+    if (!conversation) {
+      return jsonError(404, "Conversation not found");
+    }
+
+    return Response.json(conversation);
   } catch (error) {
     logError("Failed to update conversation", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to update conversation" },
       { status: 500 }
     );
@@ -62,17 +71,25 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const deleted = await deleteConversation(id, TEMP_USER_ID);
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "Conversation not found" },
-        { status: 404 }
+    const auth = await requireUserId();
+    if (!auth.ok) return auth.response;
+
+    const access = await getConversationWithAccessCheck(id, auth.userId);
+    if (!access.ok) {
+      return jsonError(
+        access.status,
+        access.status === 403 ? "Forbidden" : "Conversation not found"
       );
     }
-    return NextResponse.json({ success: true });
+
+    const deleted = await deleteConversation(id, auth.userId);
+    if (!deleted) {
+      return jsonError(404, "Conversation not found");
+    }
+    return Response.json({ success: true });
   } catch (error) {
     logError("Failed to delete conversation", error);
-    return NextResponse.json(
+    return Response.json(
       { error: "Failed to delete conversation" },
       { status: 500 }
     );
