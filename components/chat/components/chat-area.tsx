@@ -8,19 +8,18 @@ import { useMemo } from "react";
 import { MessageList } from "@/components/chat/components/message-list";
 import { MultimodalInput } from "@/components/chat/components/multimodal-input";
 import { isChatBusy } from "@/components/chat/types";
-import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Sparkles,
   Code,
   FileText,
   Lightbulb,
-  MoreHorizontal,
 } from "lucide-react";
 import { ChatPart } from "@/lib/chat/types";
 import { Attachment } from "@/components/chat/components/preview-attachment";
 import { isRecord } from "@/lib/utils";
 import { useDataStream } from "@/components/data-stream-provider";
+import { UserMenu } from "@/components/user/user-menu";
 
 const suggestions = [
   { icon: Code, text: "帮我写一段 React 代码", color: "text-gray-600" },
@@ -245,13 +244,7 @@ export function ChatArea({
           </div>
           <span className="font-semibold text-gray-900">{title}</span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-xl text-gray-500 hover:text-gray-900 hover:bg-gray-100"
-        >
-          <MoreHorizontal className="w-5 h-5" />
-        </Button>
+        <UserMenu />
       </header>
 
       {/* Messages Area */}

@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { MoreHorizontal, Pencil, Trash2, Search } from "lucide-react";
-import useSWR from "swr";
+import { trpc } from "@/lib/trpc/client";
+import { useAuth } from "@/components/auth/auth-provider";
+import { toast } from "sonner";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -21,26 +23,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { groupByRecency } from "@/components/chat/utils/group-by-recency";
 import type { Conversation } from "@/components/chat/types";
+import type { AppRouter } from "@/server";
+import { inferRouterOutputs } from "@trpc/server";
 
-const fetcher = async (url: string) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("Failed to fetch");
-  }
-  const data = await response.json();
-  return data.map((conv: {
-    id: string;
-    title: string;
-    createdAt: string;
-    updatedAt: string;
-  }): Conversation => ({
-    id: conv.id,
-    title: conv.title,
-    messages: [],
-    createdAt: new Date(conv.createdAt),
-    updatedAt: new Date(conv.updatedAt),
-  }));
-};
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type ConversationList = RouterOutputs["conversation"]["list"];
 
 interface SidebarItemProps {
   conversation: Conversation;
@@ -160,16 +147,74 @@ export function SidebarHistory({
     ? pathname.split("/")[3]
     : null;
 
-  const { data: conversations, isLoading, mutate } = useSWR<Conversation[]>(
-    "/api/conversations",
-    fetcher
-  );
+  const { user, isLoading: isAuthLoading } = useAuth();
+
+  const { data: conversations, isLoading: isDataLoading } =
+    trpc.conversation.list.useQuery(undefined, { enabled: !!user });
+
+  const utils = trpc.useUtils();
+
+  const updateMutation = trpc.conversation.update.useMutation({
+    onMutate: async (newData) => {
+      await utils.conversation.list.cancel();
+      const previous = utils.conversation.list.getData();
+
+      utils.conversation.list.setData(
+        undefined,
+        (old: ConversationList | undefined) =>
+          old?.map((c) =>
+            c.id === newData.id ? { ...c, title: newData.title } : c
+          )
+      );
+
+      return { previous };
+    },
+    onError: (err, newData, context) => {
+      utils.conversation.list.setData(undefined, context?.previous);
+      toast.error(err.message);
+    },
+    onSettled: () => {
+      utils.conversation.list.invalidate();
+    },
+    onSuccess: () => {
+      toast.success("重命名成功");
+    },
+  });
+
+  const deleteMutation = trpc.conversation.delete.useMutation({
+    onMutate: async ({ id }) => {
+      await utils.conversation.list.cancel();
+      const previous = utils.conversation.list.getData();
+
+      utils.conversation.list.setData(
+        undefined,
+        (old: ConversationList | undefined) => old?.filter((c) => c.id !== id)
+      );
+
+      return { previous };
+    },
+    onError: (err, newData, context) => {
+      utils.conversation.list.setData(undefined, context?.previous);
+      toast.error(err.message);
+    },
+    onSettled: () => {
+      utils.conversation.list.invalidate();
+    },
+    onSuccess: () => {
+      toast.success("删除成功");
+    },
+  });
 
   const sortedConversations = useMemo(() => {
     if (!conversations) return [];
-    return [...conversations].sort(
-      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-    );
+    return conversations
+      .map((c) => ({
+        ...c,
+        messages: [],
+        createdAt: new Date(c.createdAt),
+        updatedAt: new Date(c.updatedAt),
+      }))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }, [conversations]);
 
   const filteredConversations = useMemo(() => {
@@ -189,47 +234,36 @@ export function SidebarHistory({
   };
 
   const handleRename = async (id: string, title: string) => {
-    // Optimistic update
-    mutate(
-      (current) =>
-        current?.map((c) => (c.id === id ? { ...c, title } : c)),
-      false
-    );
-
-    try {
-      await fetch(`/api/conversations/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ title }),
-      });
-      mutate();
-    } catch (err) {
-      console.error(err);
-      mutate();
-    }
+    updateMutation.mutate({ id, title });
   };
 
   const handleDelete = async (id: string) => {
     const isCurrentChat = pathname === `/chat/c/${id}`;
-
-    // Optimistic update
-    mutate(
-      (current) => current?.filter((c) => c.id !== id),
-      false
-    );
-
-    try {
-      await fetch(`/api/conversations/${id}`, { method: "DELETE" });
-      if (isCurrentChat) {
-        router.push("/chat");
-      }
-      mutate();
-    } catch (err) {
-      console.error(err);
-      mutate();
+    deleteMutation.mutate({ id });
+    if (isCurrentChat) {
+      router.push("/chat");
     }
   };
 
-  if (isLoading) {
+  if (isAuthLoading) {
+    return (
+      <div className="p-4">
+        <div className="animate-pulse space-y-2">
+          <div className="h-8 bg-surface-2 rounded-lg w-1/2" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        请先登录查看历史
+      </div>
+    );
+  }
+
+  if (isDataLoading) {
     return (
       <div className="p-4">
         <div className="animate-pulse space-y-2">
@@ -247,7 +281,6 @@ export function SidebarHistory({
 
   return (
     <>
-      {/* Search */}
       <div className="px-3 pb-2">
         <div className="relative group">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted/60 group-focus-within:text-fg-muted transition-colors" />
@@ -260,7 +293,6 @@ export function SidebarHistory({
         </div>
       </div>
 
-      {/* Conversation List */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-surface-2 scrollbar-track-transparent">
         {groups.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-fg-muted text-sm gap-2 opacity-60">

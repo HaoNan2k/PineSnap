@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSWRConfig } from "swr";
+import { trpc } from "@/lib/trpc/client";
 import { useDataStream } from "./data-stream-provider";
 
 export function DataStreamHandler() {
   const { dataStream, setDataStream } = useDataStream();
-  const { mutate } = useSWRConfig();
+  const utils = trpc.useUtils();
 
   useEffect(() => {
     if (!dataStream?.length) {
@@ -19,7 +19,6 @@ export function DataStreamHandler() {
     let shouldRefreshConversations = false;
 
     for (const delta of newDeltas) {
-      // Handle chat title updates - trigger sidebar refresh
       if (delta.type === "data-titleUpdated" || delta.type === "data-conversationId") {
         shouldRefreshConversations = true;
         continue;
@@ -27,9 +26,9 @@ export function DataStreamHandler() {
     }
 
     if (shouldRefreshConversations) {
-      mutate("/api/conversations");
+      utils.conversation.list.invalidate();
     }
-  }, [dataStream, setDataStream, mutate]);
+  }, [dataStream, setDataStream, utils]);
 
   return null;
 }

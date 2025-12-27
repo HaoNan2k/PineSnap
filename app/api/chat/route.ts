@@ -21,7 +21,7 @@ import { ChatPart } from "@/lib/chat/types";
 import { isToolResultOutput } from "@/lib/chat/tool-result-output";
 import type { ToolResultPart } from "ai";
 import { logError } from "@/lib/logger";
-import { requireUserId } from "@/lib/http/api";
+import { getAuthenticatedUserId } from "@/lib/supabase/auth";
 
 export const maxDuration = 30;
 
@@ -80,9 +80,11 @@ export async function POST(req: Request) {
     }
 
     const { conversationId, clientMessageId, input } = parsedBody.data;
-    const auth = await requireUserId();
-    if (!auth.ok) return auth.response;
-    const userId = auth.userId;
+    
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const ensureConversation = async (): Promise<
       | { ok: true; id: string }

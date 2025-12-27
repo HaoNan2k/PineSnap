@@ -1,12 +1,14 @@
 import { fileStorage } from "@/lib/storage";
 import { mediaTypeResolver } from "@/lib/files/media-type";
 import { logError } from "@/lib/logger";
-import { requireUserId } from "@/lib/http/api";
+import { getAuthenticatedUserId } from "@/lib/supabase/auth";
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireUserId();
-    if (!auth.ok) return auth.response;
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -45,4 +47,3 @@ export async function POST(request: Request) {
     return Response.json({ error: "Upload failed" }, { status: 500 });
   }
 }
-
