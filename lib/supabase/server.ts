@@ -3,14 +3,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
-  }
-  return value;
-}
+import { requireEnv } from "@/lib/env";
 
 export async function createSupabaseServerClient(): Promise<SupabaseClient> {
   const url = requireEnv("SUPABASE_URL");
@@ -36,4 +29,8 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient> {
       },
     },
   });
+}
+
+export function requireServerEnv(name: string): string {
+  return requireEnv(name);
 }

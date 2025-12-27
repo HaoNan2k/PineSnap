@@ -3,6 +3,12 @@ import { mediaTypeResolver } from "@/lib/files/media-type";
 import { logError } from "@/lib/logger";
 import { getAuthenticatedUserId } from "@/lib/supabase/auth";
 
+function getTtlSeconds(): number {
+  const raw = Number(process.env.SUPABASE_SIGNED_URL_TTL_SECONDS ?? "300");
+  if (!Number.isFinite(raw) || raw <= 0) return 300;
+  return raw;
+}
+
 export async function POST(request: Request) {
   try {
     const userId = await getAuthenticatedUserId();
@@ -32,12 +38,16 @@ export async function POST(request: Request) {
       bytes: buffer,
     });
 
-    const ref = await fileStorage.save(buffer, file.name);
+    const ref = await fileStorage.save(buffer, file.name, {
+      prefix: `users/${userId}`,
+    });
     const url = await fileStorage.resolveUrl(ref);
+    const ttlSeconds = getTtlSeconds();
 
     return Response.json({
       ref,
       url,
+      expiresAt: Date.now() + ttlSeconds * 1000,
       name: file.name,
       mediaType,
       size: buffer.byteLength,

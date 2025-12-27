@@ -53,6 +53,7 @@ export const MultimodalInput = ({
             ref: string;
             mediaType: string;
             size?: number;
+            expiresAt?: number;
           };
           const attachment: Attachment = {
             url: d.url,
@@ -60,6 +61,7 @@ export const MultimodalInput = ({
             ref: d.ref,
             mediaType: d.mediaType,
             size: d.size,
+            ...(typeof d.expiresAt === "number" ? { expiresAt: d.expiresAt } : {}),
           };
           return attachment;
         }

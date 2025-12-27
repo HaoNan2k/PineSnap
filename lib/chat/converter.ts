@@ -85,22 +85,37 @@ async function chatPartsToUserContent(parts: ChatPart[]): Promise<UserContent> {
     } else if (p.type === "file") {
       // Bytes-first for images: avoid passing local/private URLs to model providers.
       if (p.mediaType.startsWith("image/")) {
-        const bytes = await fileContentResolver.readBytes(p.ref);
-        content.push({ type: "image", image: bytes, mediaType: p.mediaType });
+        try {
+          const bytes = await fileContentResolver.readBytes(p.ref);
+          content.push({ type: "image", image: bytes, mediaType: p.mediaType });
+        } catch {
+          // Missing/invalid ref should not break the whole chat request.
+          content.push({
+            type: "text",
+            text: `附件《${p.name}》不可用（文件缺失或无权限）。`,
+          });
+        }
         continue;
       }
 
       // Text-like files: extract and inject as bounded text (with truncation).
       if (isTextLikeMediaType(p.mediaType)) {
-        const bytes = await fileContentResolver.readBytes(p.ref);
-        const decoded = Buffer.from(bytes).toString("utf-8");
-        const { text, truncated } = truncateText(decoded, 20_000);
-        const header = `附件《${p.name}》(${p.mediaType})：`;
-        const footer = truncated ? "\n\n[内容已截断]" : "";
-        content.push({
-          type: "text",
-          text: `${header}\n\`\`\`\n${text}\n\`\`\`${footer}`,
-        });
+        try {
+          const bytes = await fileContentResolver.readBytes(p.ref);
+          const decoded = Buffer.from(bytes).toString("utf-8");
+          const { text, truncated } = truncateText(decoded, 20_000);
+          const header = `附件《${p.name}》(${p.mediaType})：`;
+          const footer = truncated ? "\n\n[内容已截断]" : "";
+          content.push({
+            type: "text",
+            text: `${header}\n\`\`\`\n${text}\n\`\`\`${footer}`,
+          });
+        } catch {
+          content.push({
+            type: "text",
+            text: `附件《${p.name}》不可用（文件缺失或无权限）。`,
+          });
+        }
         continue;
       }
 
@@ -235,7 +250,14 @@ export async function convertDbToUIMessages(
       if (p.type === "text") {
         uiParts.push({ type: "text", text: p.text });
       } else if (p.type === "file") {
-        const url = await fileStorage.resolveUrl(p.ref);
+        let url = "";
+        try {
+          url = await fileStorage.resolveUrl(p.ref);
+        } catch {
+          // Missing/legacy refs must not break page rendering.
+          // UI currently renders only filenames, so empty url is acceptable.
+          url = "";
+        }
         uiParts.push({
           type: "file",
           mediaType: p.mediaType,

@@ -86,6 +86,18 @@ export async function POST(req: Request) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Reject forged file refs. All file refs MUST be scoped to the current user.
+    for (const p of input) {
+      if (p.type === "file") {
+        if (!p.ref.startsWith(`users/${userId}/`)) {
+          return Response.json(
+            { error: "Invalid file ref" },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const ensureConversation = async (): Promise<
       | { ok: true; id: string }
       | { ok: false; status: 403 | 404 }
