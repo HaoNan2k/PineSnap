@@ -4,10 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma migrate deploy && prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "prisma",
+      "@prisma/engines",
+      "sharp"
+    ]
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.0-beta.143",
