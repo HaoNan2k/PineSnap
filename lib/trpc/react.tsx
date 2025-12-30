@@ -5,6 +5,18 @@ import { httpBatchLink } from "@trpc/client";
 import { useState } from "react";
 import { trpc } from "./client";
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getTrpcErrorCode(error: unknown): string | undefined {
+  if (!isObject(error)) return undefined;
+  const data = error["data"];
+  if (!isObject(data)) return undefined;
+  const code = data["code"];
+  return typeof code === "string" ? code : undefined;
+}
+
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -12,12 +24,8 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             retry: (failureCount, error) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const err = error as any;
-              if (
-                err?.data?.code === "UNAUTHORIZED" ||
-                err?.data?.code === "FORBIDDEN"
-              ) {
+              const code = getTrpcErrorCode(error);
+              if (code === "UNAUTHORIZED" || code === "FORBIDDEN") {
                 return false;
               }
               return failureCount < 3;

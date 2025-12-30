@@ -24,7 +24,7 @@
 - **会话 URL**：新对话入口为 `/chat`，历史会话为 `/chat/c/[id]`。
 - **会话创建**：懒创建；仅在首条消息发送后创建 DB 会话记录。
 - **URL 同步**：首条发送后使用 History API 更新 URL，避免真实导航导致流式中断。
-- **侧边栏数据流**：侧边栏通过 `/api/conversations` + SWR 获取，DataStream 事件触发 `mutate('/api/conversations')` 刷新。
+- **侧边栏数据流**：侧边栏使用 **tRPC + React Query** 获取列表数据；DataStream 事件触发 `utils.conversation.list.invalidate()` 进行近实时刷新。
 
 ### 测试策略
 - 当前以手动回归路径为主（@Browser 验证清单写在 changes/tasks 中）。

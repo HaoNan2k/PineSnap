@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PineSnap
 
-## Getting Started
+基于 Next.js App Router 的 AI 聊天应用练习仓库，采用 OpenSpec（规格驱动）方式演进，集成 Supabase Auth、Prisma + PostgreSQL、tRPC + React Query，以及文件上传/签名 URL。
 
-First, run the development server:
+## 本地开发
+
+### 前置条件
+
+- Node.js（建议 LTS）
+- pnpm（本项目以 pnpm 为准）
+- 数据库（二选一）
+  - **本地 Postgres**：使用 `docker-compose.yml`
+  - **Supabase Postgres**：使用 Supabase 提供的连接串
+
+### 环境变量
+
+本仓库提供 `env.example` 作为模板（可提交文件）。复制并创建你自己的 `.env.local`：
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+关键约定（避免常见坑）：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Supabase 项目 URL（HTTP）**
+  - `SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_URL` MUST 是 `https://...supabase.co`
+  - 不能填 `postgresql://...` 连接串，否则会触发构建期 prerender 错误（`Invalid supabaseUrl`）
+- **数据库连接串（Postgres）**
+  - `DATABASE_URL` / `DIRECT_URL` MUST 是 `postgresql://...`
+  - 使用 Supabase Postgres 时建议在 `DIRECT_URL`/`DATABASE_URL` 添加 `?sslmode=require`（云构建环境更稳）
+- **敏感变量**
+  - `SUPABASE_SERVICE_ROLE_KEY` 仅服务端使用，严禁放到 `NEXT_PUBLIC_*`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 安装依赖与启动
 
-## Learn More
+```bash
+pnpm install
+pnpm dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+访问 `http://localhost:3000`。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 本地数据库（可选）
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+docker compose up -d
+```
 
-## Deploy on Vercel
+## 部署到 Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Build Command
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+建议由 `package.json` 管理构建逻辑（而不是写死在 Vercel UI）：
+
+- `pnpm run build` 会执行：
+  - `prisma migrate deploy`
+  - `prisma generate`
+  - `next build`
+
+### Prisma / Supabase 常见问题
+
+- **P1001: Can't reach database server**
+  - 若使用 Supabase Postgres，建议 `DIRECT_URL`（migrate）包含 `sslmode=require`。
+- **Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL**
+  - 检查 `NEXT_PUBLIC_SUPABASE_URL` 是否误填成 `postgresql://...`。
+
+### Supabase Auth（Email OTP / Confirm Signup）
+
+如果你期望“输入邮箱 → 收 6 位码 → 登录”，但收到的是 “Confirm your signup”：
+
+- 代码中使用了 `shouldCreateUser: true`，首次登录可能会创建用户
+- 邮件类型取决于 Supabase 的 **Email Confirmations** 设置与邮件模板配置
+
+确认链接跳转到 `localhost:3000` 的解决方式：
+
+- Supabase Dashboard → Authentication → URL Configuration
+  - 设置 **Site URL** 为你的线上域名
+  - 配置 **Redirect URLs** 包含线上域名与本地开发域名
+
+## OpenSpec（规格驱动）
+
+OpenSpec 文档位于 `openspec/`。当变更触达路由/API/DB/权限/存储契约等“外部行为”时，请先走提案与验证流程：
+
+```bash
+openspec validate --all --strict
+```
+
