@@ -154,21 +154,39 @@ export function ChatArea({
     () =>
       messages.map((m) => {
         let content = "";
+        const parts: ChatPart[] = [];
+
         if (m.parts && m.parts.length > 0) {
+          // 1. Extract plain text content for backward compatibility
           const texts = m.parts
             .filter(
               (p): p is Extract<typeof p, { type: "text" }> => p.type === "text"
             )
             .map((p) => p.text);
-          const files = m.parts
-            .filter(
-              (p): p is Extract<typeof p, { type: "file" }> => p.type === "file"
-            )
-            .map((p) => `📎 ${p.filename ?? "文件"}`);
+          content = texts.join("\n");
 
-          content = [...texts, ...files].join("\n");
+          // 2. Map all valid parts to ChatPart structure
+          m.parts.forEach((p) => {
+            if (p.type === "text") {
+              parts.push({ type: "text", text: p.text });
+            } else if (p.type === "file") {
+              const ref =
+                getFileRefFromProviderMetadata(p.providerMetadata) ??
+                (typeof p.url === "string" && !p.url.startsWith("data:")
+                  ? p.url
+                  : undefined);
+              
+              parts.push({
+                type: "file",
+                name: p.filename ?? "文件",
+                mediaType: p.mediaType ?? "application/octet-stream",
+                ref: ref ?? "", // Ensure we have a string, even if empty (though rendering might hide it)
+              });
+            }
+          });
         } else if (hasContent(m)) {
           content = m.content;
+          parts.push({ type: "text", text: m.content });
         }
 
         let createdAt = new Date();
@@ -193,6 +211,7 @@ export function ChatArea({
           id: m.id,
           role: m.role as "user" | "assistant" | "system",
           content: content,
+          parts: parts, // Pass structured parts
           createdAt: createdAt,
         };
       }),
@@ -289,4 +308,4 @@ export function ChatArea({
       <MultimodalInput onSend={handleSend} disabled={isAssistantTyping} />
     </div>
   );
-};
+}

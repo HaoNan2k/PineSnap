@@ -1,3 +1,5 @@
+import { ChatPart } from "@/lib/chat/types";
+
 export interface Conversation {
   id: string;
   title: string;
@@ -9,8 +11,7 @@ export interface Conversation {
 export interface Message {
   id: string;
   role: string;
-  content: MessageContent;
+  content: string;
+  parts?: ChatPart[];
   createdAt: Date;
 }
-
-type MessageContent = string;

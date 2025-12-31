@@ -4,10 +4,11 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
-import { Paperclip, Send } from "lucide-react";
+import { Paperclip, ArrowUp, X } from "lucide-react"; // ArrowUp is more v0-like than Send
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PreviewAttachment, type Attachment } from "./preview-attachment";
+import { cn } from "@/lib/utils";
 
 interface MultimodalInputProps {
   onSend: (content: string, attachments: Attachment[]) => void;
@@ -77,7 +78,6 @@ export const MultimodalInput = ({
   const handleUploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
 
-    // Add filenames to queue to show loading state
     setUploadQueue((prev) => [...prev, ...files.map((f) => f.name)]);
 
     try {
@@ -89,10 +89,7 @@ export const MultimodalInput = ({
 
       setAttachments((prev) => [...prev, ...successful]);
     } finally {
-      // Clear queue (simple implementation: assumes all finished)
-      // A more robust implementation would track individual file status
       setUploadQueue([]);
-      // Reset input so change event triggers again for same file
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -116,8 +113,6 @@ export const MultimodalInput = ({
     const hasAttachments = attachments.length > 0;
 
     if (!hasText && !hasAttachments) return;
-
-    // Prevent send if still uploading
     if (uploadQueue.length > 0) return;
 
     onSend(input, attachments);
@@ -138,11 +133,11 @@ export const MultimodalInput = ({
     disabled || isUploading || (!input.trim() && attachments.length === 0);
 
   return (
-    <div className="border-t border-gray-100 bg-white px-4 md:px-6 py-4">
-      <div className="max-w-3xl mx-auto flex flex-col gap-4">
-        {/* Attachments Preview Area */}
+    <div className="w-full bg-background px-4 md:px-6 pb-4 pt-2">
+      <div className="max-w-3xl mx-auto flex flex-col gap-3">
+        {/* Attachments Preview Area - Above input */}
         {(attachments.length > 0 || uploadQueue.length > 0) && (
-          <div className="flex flex-row gap-2 overflow-x-auto pb-2">
+          <div className="flex flex-row gap-3 overflow-x-auto py-2">
             {attachments.map((att) => (
               <PreviewAttachment
                 key={att.url}
@@ -162,17 +157,56 @@ export const MultimodalInput = ({
           </div>
         )}
 
-        <div className="relative flex items-end gap-2 p-2 rounded-2xl border border-gray-200 bg-gray-50/50 focus-within:border-gray-300 focus-within:bg-white focus-within:shadow-sm transition-all">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-9 h-9 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || isUploading}
-          >
-            <Paperclip className="w-5 h-5" />
-          </Button>
+        <div 
+          className={cn(
+            "relative flex flex-col w-full p-4 bg-white rounded-[26px] transition-all duration-200",
+            "border border-black/5 shadow-sm",
+            "focus-within:shadow-md focus-within:border-black/10",
+            disabled && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={placeholder}
+            className="w-full min-h-[72px] max-h-64 resize-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 text-gray-900 placeholder:text-gray-400 text-base leading-relaxed"
+            rows={1}
+            disabled={disabled}
+            autoFocus
+          />
+
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-9 h-9 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || isUploading}
+                aria-label="Attach file"
+              >
+                <Paperclip className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <Button
+              onClick={handleSubmit}
+              disabled={isSendDisabled}
+              size="icon"
+              className={cn(
+                "w-9 h-9 rounded-full transition-all duration-200",
+                isSendDisabled 
+                  ? "bg-gray-100 text-gray-300" 
+                  : "bg-gray-900 hover:bg-gray-800 text-white shadow-sm"
+              )}
+            >
+              <ArrowUp className="w-5 h-5" />
+            </Button>
+          </div>
 
           <input
             ref={fileInputRef}
@@ -182,27 +216,6 @@ export const MultimodalInput = ({
             onChange={handleFileChange}
             disabled={disabled || isUploading}
           />
-
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={placeholder}
-            className="flex-1 min-h-[44px] max-h-32 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-gray-900 placeholder:text-gray-400 py-3 px-1"
-            rows={1}
-            disabled={disabled}
-          />
-
-          <Button
-            onClick={handleSubmit}
-            disabled={isSendDisabled}
-            size="icon"
-            className="w-9 h-9 rounded-xl bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-40 disabled:bg-gray-300 flex-shrink-0 mb-1"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
         </div>
 
         <p className="text-center text-xs text-gray-400">
