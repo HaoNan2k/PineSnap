@@ -155,6 +155,7 @@ export function ChatArea({
       messages.map((m) => {
         let content = "";
         const parts: ChatPart[] = [];
+        const attachments: Attachment[] = [];
 
         if (m.parts && m.parts.length > 0) {
           // 1. Extract plain text content for backward compatibility
@@ -170,18 +171,28 @@ export function ChatArea({
             if (p.type === "text") {
               parts.push({ type: "text", text: p.text });
             } else if (p.type === "file") {
-              const ref =
-                getFileRefFromProviderMetadata(p.providerMetadata) ??
-                (typeof p.url === "string" && !p.url.startsWith("data:")
-                  ? p.url
-                  : undefined);
-              
-              parts.push({
-                type: "file",
-                name: p.filename ?? "文件",
-                mediaType: p.mediaType ?? "application/octet-stream",
-                ref: ref ?? "", // Ensure we have a string, even if empty (though rendering might hide it)
+              const ref = getFileRefFromProviderMetadata(p.providerMetadata);
+              const mediaType = p.mediaType ?? "application/octet-stream";
+              const name = p.filename ?? "文件";
+
+              // Rendering path: keep both url (fast initial render) and stable ref (refresh capability).
+              attachments.push({
+                name,
+                mediaType,
+                url: typeof p.url === "string" ? p.url : "",
+                ref: ref ?? "",
               });
+
+              // Prompt-sending path: ONLY accept stable storage refs.
+              // Never treat signed URLs as refs.
+              if (ref) {
+                parts.push({
+                  type: "file",
+                  name,
+                  mediaType,
+                  ref,
+                });
+              }
             }
           });
         } else if (hasContent(m)) {
@@ -212,6 +223,7 @@ export function ChatArea({
           role: m.role as "user" | "assistant" | "system",
           content: content,
           parts: parts, // Pass structured parts
+          attachments,
           createdAt: createdAt,
         };
       }),

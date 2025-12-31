@@ -263,6 +263,10 @@ export async function convertDbToUIMessages(
           mediaType: p.mediaType,
           filename: p.name,
           url,
+          // IMPORTANT:
+          // Keep the stable storage ref for client-side replay.
+          // The UI can use this ref to refresh short-lived signed URLs.
+          providerMetadata: { attachment: { ref: p.ref } },
         });
       } else if (p.type === "source") {
         if (p.sourceType === "url" && p.url) {

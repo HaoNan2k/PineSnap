@@ -8,8 +8,7 @@ import { Response } from "@/components/chat/components/response";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 import { cn } from "@/lib/utils";
 import { MessageActions } from "./message-actions";
-import { PreviewAttachment, type Attachment } from "./preview-attachment";
-import { ChatPart } from "@/lib/chat/types";
+import { PreviewAttachment } from "./preview-attachment";
 
 const messageTextClassName = "text-[15px] leading-relaxed";
 
@@ -18,30 +17,17 @@ function MessageItem({ message }: { message: Message }) {
 
   // 1. Separate parts
   let textContent = message.content;
-  let fileParts: Extract<ChatPart, { type: "file" }>[] = [];
+  const attachments = message.attachments ?? [];
 
+  // Prefer structured text parts if present.
   if (message.parts && message.parts.length > 0) {
-    const textParts = message.parts.filter((p) => p.type === "text") as Extract<
-      ChatPart,
-      { type: "text" }
-    >[];
+    const textParts = message.parts.filter((p) => p.type === "text") as Array<
+      Extract<(typeof message.parts)[number], { type: "text" }>
+    >;
     if (textParts.length > 0) {
       textContent = textParts.map((p) => p.text).join("");
     }
-    fileParts = message.parts.filter((p) => p.type === "file") as Extract<
-      ChatPart,
-      { type: "file" }
-    >[];
   }
-
-  // 2. Map to Attachment for PreviewAttachment component
-  const attachments: Attachment[] = fileParts.map((p) => ({
-    name: p.name,
-    mediaType: p.mediaType,
-    url: "", // PreviewAttachment will resolve signed URL using ref
-    ref: p.ref,
-    size: p.size,
-  }));
 
   if (isUser) {
     return (
@@ -66,7 +52,16 @@ function MessageItem({ message }: { message: Message }) {
             {attachments.length > 0 && (
               <div className="flex flex-wrap justify-end gap-2">
                 {attachments.map((att, i) => (
-                  <PreviewAttachment key={i} attachment={att} />
+                  <PreviewAttachment
+                    key={`${att.ref ?? "no-ref"}-${att.url ?? "no-url"}-${i}`}
+                    attachment={{
+                      name: att.name,
+                      mediaType: att.mediaType,
+                      url: att.url ?? "",
+                      ref: att.ref ?? "",
+                      size: att.size,
+                    }}
+                  />
                 ))}
               </div>
             )}
@@ -94,7 +89,16 @@ function MessageItem({ message }: { message: Message }) {
           {attachments.length > 0 && (
             <div className="flex flex-wrap justify-start gap-2 mt-2">
               {attachments.map((att, i) => (
-                <PreviewAttachment key={i} attachment={att} />
+                <PreviewAttachment
+                  key={`${att.ref ?? "no-ref"}-${att.url ?? "no-url"}-${i}`}
+                  attachment={{
+                    name: att.name,
+                    mediaType: att.mediaType,
+                    url: att.url ?? "",
+                    ref: att.ref ?? "",
+                    size: att.size,
+                  }}
+                />
               ))}
             </div>
           )}
