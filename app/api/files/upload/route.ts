@@ -9,6 +9,42 @@ function getTtlSeconds(): number {
   return raw;
 }
 
+function getAllowedMediaTypes(): string[] {
+  const raw = process.env.FILE_UPLOAD_ALLOWED_MEDIA_TYPES;
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+
+  // Minimal safe defaults:
+  // - images: allow bytes-first prompt hydration
+  // - text-like: allow prompt injection via bounded extraction
+  // - pdf: commonly shared, stored for replay (not hydrated into prompt)
+  return [
+    "image/*",
+    "text/*",
+    "application/json",
+    "application/xml",
+    "application/x-yaml",
+    "application/pdf",
+  ];
+}
+
+function isAllowedMediaType(mediaType: string, allowlist: string[]): boolean {
+  if (mediaType === "application/octet-stream") return false;
+  for (const allowed of allowlist) {
+    if (allowed.endsWith("/*")) {
+      const prefix = allowed.slice(0, -1); // keep trailing '/'
+      if (mediaType.startsWith(prefix)) return true;
+    } else if (mediaType === allowed) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function POST(request: Request) {
   try {
     const userId = await getAuthenticatedUserId();
@@ -37,6 +73,18 @@ export async function POST(request: Request) {
       declaredMediaType: file.type,
       bytes: buffer,
     });
+
+    const allowlist = getAllowedMediaTypes();
+    if (!isAllowedMediaType(mediaType, allowlist)) {
+      return Response.json(
+        {
+          error: "Disallowed file type",
+          mediaType,
+          allowed: allowlist,
+        },
+        { status: 400 }
+      );
+    }
 
     const ref = await fileStorage.save(buffer, file.name, {
       prefix: `users/${userId}`,
