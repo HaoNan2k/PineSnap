@@ -4,7 +4,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
-import { Paperclip, ArrowUp, X } from "lucide-react"; // ArrowUp is more v0-like than Send
+import { Paperclip, ArrowUp } from "lucide-react"; // ArrowUp is more v0-like than Send
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PreviewAttachment, type Attachment } from "./preview-attachment";
