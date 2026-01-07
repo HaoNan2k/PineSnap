@@ -37,6 +37,19 @@ model Message {
   @@index([conversationId])
 }
 
+model CaptureToken {
+  id         String   @id @default(uuid(7))
+  userId     String
+  tokenHash  String   @unique
+  label      String?
+  scopes     String[] @default([])
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId])
+}
+
 enum Role {
   user
   assistant
