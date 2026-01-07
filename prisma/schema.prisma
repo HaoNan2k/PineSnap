@@ -50,6 +50,20 @@ model CaptureToken {
   @@index([userId])
 }
 
+model Resource {
+  id         String   @id @default(uuid(7))
+  userId     String
+  type       String
+  title      String
+  externalId String?
+  content    Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([type, externalId])
+}
+
 enum Role {
   user
   assistant
