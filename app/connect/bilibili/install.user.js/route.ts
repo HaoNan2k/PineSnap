@@ -1,34 +1,15 @@
 import { createCaptureToken, revokeCaptureTokensByScopeAndLabel } from "@/lib/db/capture-token";
 import { getAuthenticatedUserId } from "@/lib/supabase/auth";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { SCRIPT_TEMPLATE } from "./script.template";
 
 const LABEL = "Bilibili 连接";
 
 export const runtime = "nodejs";
 
-const TEMPLATE_PATH = path.join(
-  process.cwd(),
-  "app",
-  "connect",
-  "bilibili",
-  "install.user.js",
-  "script.template.user.js"
-);
-
-let cachedTemplate: string | null = null;
-
-async function getTemplate(): Promise<string> {
-  if (cachedTemplate) return cachedTemplate;
-  cachedTemplate = await fs.readFile(TEMPLATE_PATH, "utf8");
-  return cachedTemplate;
-}
-
 async function buildScript(args: { baseUrl: string; token: string }): Promise<string> {
   const baseUrl = args.baseUrl.replace(/\/+$/, "");
   const token = args.token;
-  const template = await getTemplate();
-  return template
+  return SCRIPT_TEMPLATE
     .replace("__PINESNAP_BASE_URL__", JSON.stringify(baseUrl))
     .replace("__PINESNAP_TOKEN__", JSON.stringify(token));
 }
@@ -67,4 +48,3 @@ export async function GET(req: Request) {
     },
   });
 }
-

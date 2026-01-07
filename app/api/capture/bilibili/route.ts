@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { logError } from "@/lib/logger";
 import { verifyCaptureToken } from "@/lib/db/capture-token";
-import { createConversation, touchConversation, updateConversationTitle } from "@/lib/db/conversation";
-import { createMessage } from "@/lib/db/message";
-import { Role } from "@/generated/prisma/client";
-import type { ChatPart } from "@/lib/chat/types";
+import { createResource } from "@/lib/db/resource";
 
 const ALLOWED_ORIGINS = new Set(["https://www.bilibili.com"]);
 
@@ -27,37 +24,45 @@ function extractBearerToken(req: Request): string | null {
   if (!raw) return null;
   const match = /^Bearer\s+(.+)\s*$/i.exec(raw);
   if (!match) return null;
-  return match[1] ?? null;
+  return match[1];
 }
 
 const cueSchema = z.object({
-  startLabel: z.string().min(1).optional(),
   startMs: z.number().int().nonnegative().optional(),
-  endMs: z.number().int().nonnegative().optional(),
+  startLabel: z.string().min(1).optional(),
   text: z.string().min(1),
 });
 
+const chapterSchema = z.object({
+  startMs: z.number().int().nonnegative().optional(),
+  startLabel: z.string().min(1).optional(),
+  title: z.string().min(1),
+});
+
 const payloadSchema = z.object({
-  v: z.literal(1),
-  source: z.object({ url: z.string().url() }),
-  video: z
-    .object({
-      title: z.string().optional(),
-      bvid: z.string().optional(),
-      p: z.number().int().positive().optional(),
-    })
-    .optional(),
-  subtitles: z
-    .object({
-      extractor: z
-        .union([
-          z.literal("bilibili_ai_assistant_panel"),
-          z.literal("unknown"),
-        ])
-        .optional(),
-      cues: z.array(cueSchema),
-    })
-    .optional(),
+  version: z.literal(1),
+  metadata: z.object({
+    platform: z.literal("bilibili"),
+    id: z.string().optional(),
+    url: z.string().url(),
+    title: z.string().optional(),
+  }),
+  content: z.object({
+    summary: z
+      .object({
+        provider: z.string(),
+        text: z.string().optional(),
+        chapters: z.array(chapterSchema).optional(),
+      })
+      .optional(),
+    transcript: z
+      .object({
+        provider: z.string(),
+        language: z.string().optional(),
+        lines: z.array(cueSchema),
+      })
+      .optional(),
+  }),
 });
 
 export async function OPTIONS(req: Request) {
@@ -99,37 +104,22 @@ export async function POST(req: Request) {
     const payload = parsed.data;
     const userId = auth.userId;
 
-    const titleBase = payload.video?.title?.trim() || "B站字幕";
-    const conversation = await createConversation(userId);
-    await updateConversationTitle(
-      conversation.id,
-      userId,
-      titleBase.length > 0 ? `B站：${titleBase}`.slice(0, 60) : "B站字幕"
-    );
+    const titleBase = payload.metadata.title?.trim() || "B站采集";
+    const title =
+      titleBase.length > 0 ? `B站：${titleBase}`.slice(0, 80) : "B站采集";
 
-    const cues = payload.subtitles?.cues ?? [];
-    const lines = cues.map((c) => {
-      const prefix = c.startLabel ? `[${c.startLabel}] ` : "";
-      return `${prefix}${c.text}`;
+    const externalId = payload.metadata.id || null;
+
+    const resource = await createResource({
+      userId,
+      type: "bilibili_capture",
+      title,
+      externalId,
+      content: payload,
     });
 
-    const content = [
-      `【来源】${payload.source.url}`,
-      payload.video?.bvid ? `【BV】${payload.video.bvid}` : null,
-      typeof payload.video?.p === "number" ? `【分P】${payload.video.p}` : null,
-      "",
-      "【字幕】",
-      ...lines,
-    ]
-      .filter((v): v is string => typeof v === "string")
-      .join("\n");
-
-    const parts: ChatPart[] = [{ type: "text", text: content }];
-    const message = await createMessage(conversation.id, Role.user, parts);
-    await touchConversation(conversation.id, userId);
-
     return Response.json(
-      { ok: true, captureId: message.id, conversationId: conversation.id },
+      { ok: true, resourceId: resource.id },
       { status: 200, headers: corsHeaders }
     );
   } catch (err) {
@@ -140,4 +130,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
