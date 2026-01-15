@@ -1,14 +1,13 @@
-import Link from "next/link";
 import { requireEnv } from "@/lib/env";
 import { createContext } from "@/server/context";
 import { LoginCard } from "@/components/auth/login-card";
+import { LearnHeader } from "@/components/learn/learn-header";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { revokeCaptureTokensByScopeAndLabel } from "@/lib/db/capture-token";
 import {
   CheckCircle2,
   AlertCircle,
-  ArrowLeft,
   LayoutDashboard,
   Zap,
   ShieldCheck,
@@ -79,38 +78,7 @@ export default async function Page({
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans text-foreground">
       {/* 顶部导航栏 */}
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container flex h-16 items-center max-w-6xl mx-auto px-6">
-          <Link
-            href="/chat"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>返回</span>
-          </Link>
-          <div className="ml-4 h-4 w-[1px] bg-border hidden sm:block" />
-          <div className="ml-4 text-sm font-semibold">连接器中心</div>
-
-          <div className="flex-1" />
-
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                isConnected
-                  ? "bg-green-500/10 text-green-600 border-green-500/20 dark:text-green-400"
-                  : "bg-muted text-muted-foreground border-transparent"
-              }`}
-            >
-              <div
-                className={`h-2 w-2 rounded-full ${
-                  isConnected ? "bg-green-500 animate-pulse" : "bg-muted-foreground/40"
-                }`}
-              />
-              {isConnected ? "已连接" : "未连接"}
-            </div>
-          </div>
-        </div>
-      </header>
+      <LearnHeader />
 
       <main className="flex-1 container max-w-6xl mx-auto px-6 py-12 md:py-20">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-16 items-start">

@@ -6,9 +6,9 @@ export default function FocusLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col bg-background overflow-hidden">
       <LearnHeader />
-      <main className="flex-1 flex flex-col min-h-0 relative">
+      <main className="flex-1 min-h-0 relative">
         {children}
       </main>
     </div>

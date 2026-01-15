@@ -5,19 +5,18 @@ import Link from "next/link";
 export function LearnHeader() {
   return (
     <header className="w-full px-6 py-4 flex items-center justify-between sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-sand/20">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/sources"
-          className="size-9 text-primary flex items-center justify-center bg-white rounded-xl shadow-sm border border-sand/40 hover:bg-sand/10 transition-colors"
+      <Link href="/sources" className="flex items-center gap-3 group">
+        <div
+          className="size-9 text-primary flex items-center justify-center bg-white rounded-xl shadow-sm border border-sand/40 group-hover:bg-sand/10 transition-colors"
         >
           <span className="material-symbols-rounded text-xl icon-filled">
             spa
           </span>
-        </Link>
+        </div>
         <span className="font-bold text-lg tracking-tight text-primary">
           PineSnap
         </span>
-      </div>
+      </Link>
       <div className="flex gap-4 items-center">
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-sand/40 shadow-sm text-text-secondary">
           <span className="material-symbols-rounded text-orange-500 text-xl icon-filled">
