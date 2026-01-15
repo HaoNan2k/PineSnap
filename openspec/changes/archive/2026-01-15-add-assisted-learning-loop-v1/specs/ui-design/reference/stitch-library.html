@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PineSnap Library - Nordic Forest Edition</title>
+<!-- Google Fonts: Inter for UI, Merriweather for Content -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2c4e37",
+                        "forest": "#2D4F38",
+                        "background-light": "#FAFAF9",
+                        "background-dark": "#161c18",
+                        "background": "#FAFAF9",
+                        "sand": "#D4C5A9",
+                        "forest-muted": "#6e7c73",
+                        "text-main": "#1C1C1E",
+                        "text-secondary": "#575757",
+                        "success": "#3E6B4D",
+                        "card": "#FFFFFF",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"],
+                        "serif": ["Merriweather", "serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-nav .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-[#131614] dark:text-[#f1f3f2] antialiased">
+<div class="flex min-h-screen">
+<!-- Sidebar Component -->
+<aside class="w-72 border-r border-gray-200 dark:border-gray-800 h-screen sticky top-0 flex flex-col justify-between bg-background-light dark:bg-background-dark p-8">
+<div class="flex flex-col gap-10">
+<!-- Brand -->
+<div class="flex items-center gap-3">
+<div class="bg-primary size-10 rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined">filter_hdr</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-primary dark:text-[#f1f3f2] text-lg font-bold leading-none">PineSnap</h1>
+<p class="text-forest-muted text-xs font-medium uppercase tracking-widest mt-1">Nordic Edition</p>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-forest-muted hover:bg-sand/10 transition-colors" href="#">
+<span class="material-symbols-outlined">inbox</span>
+<span class="text-sm font-medium">Inbox</span>
+</a>
+<a class="active-nav flex items-center gap-4 px-4 py-3 rounded-xl bg-primary/10 text-primary dark:bg-primary dark:text-white transition-colors" href="#">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="text-sm font-bold">Library</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-forest-muted hover:bg-sand/10 transition-colors" href="#">
+<span class="material-symbols-outlined">cloud_circle</span>
+<span class="text-sm font-medium">Memories</span>
+</a>
+<div class="mt-8 mb-4">
+<p class="px-4 text-[10px] font-bold text-forest-muted uppercase tracking-[0.2em]">Collections</p>
+</div>
+<a class="flex items-center gap-4 px-4 py-2 text-forest-muted hover:text-primary transition-colors" href="#">
+<span class="size-2 rounded-full bg-sand"></span>
+<span class="text-sm">Pine Series</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-2 text-forest-muted hover:text-primary transition-colors" href="#">
+<span class="size-2 rounded-full bg-forest-muted"></span>
+<span class="text-sm">Birch Archives</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-2 text-forest-muted hover:text-primary transition-colors" href="#">
+<span class="size-2 rounded-full bg-primary/40"></span>
+<span class="text-sm">Moss Patterns</span>
+</a>
+</nav>
+</div>
+<!-- Sidebar Bottom -->
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-forest-muted hover:bg-sand/10 transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+<div class="mt-4 px-4 flex items-center gap-3">
+<div class="size-8 rounded-full bg-sand/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+<div class="flex flex-col">
+<p class="text-xs font-bold">Erik Sørensen</p>
+<p class="text-[10px] text-forest-muted italic">v1.0.4 Premium</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 px-12 py-12 flex flex-col gap-8">
+<!-- Header Section -->
+<header class="flex flex-wrap items-end justify-between gap-6">
+<div class="flex flex-col gap-2">
+<h2 class="font-serif text-5xl font-normal text-primary dark:text-[#f1f3f2]">Your Library</h2>
+<p class="text-forest-muted font-display text-sm tracking-wide">Explore your curated Nordic collection</p>
+</div>
+<div class="flex items-center gap-4">
+<!-- Search Bar -->
+<div class="relative min-w-[320px]">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-forest-muted text-[20px]">search</span>
+<input class="w-full bg-sand/10 dark:bg-white/5 border-none focus:ring-1 focus:ring-primary rounded-xl pl-12 pr-4 py-3 text-sm placeholder:text-forest-muted/60 placeholder:font-medium" placeholder="Search your collection..." type="text"/>
+</div>
+<button class="bg-primary text-white size-12 rounded-xl flex items-center justify-center hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</header>
+<!-- Filter Chips -->
+<div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary px-6 text-white text-sm font-medium">
+<span class="material-symbols-outlined text-[18px]">done</span>
+                All Items
+            </button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full bg-sand/20 dark:bg-white/10 px-6 text-[#131614] dark:text-[#f1f3f2] text-sm font-medium hover:bg-sand/30 transition-colors">
+<span class="material-symbols-outlined text-[18px]">photo_camera</span>
+                Photography
+            </button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full bg-sand/20 dark:bg-white/10 px-6 text-[#131614] dark:text-[#f1f3f2] text-sm font-medium hover:bg-sand/30 transition-colors">
+<span class="material-symbols-outlined text-[18px]">article</span>
+                Essays
+            </button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full bg-sand/20 dark:bg-white/10 px-6 text-[#131614] dark:text-[#f1f3f2] text-sm font-medium hover:bg-sand/30 transition-colors">
+<span class="material-symbols-outlined text-[18px]">park</span>
+                Forestry
+            </button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full bg-sand/20 dark:bg-white/10 px-6 text-[#131614] dark:text-[#f1f3f2] text-sm font-medium hover:bg-sand/30 transition-colors">
+<span class="material-symbols-outlined text-[18px]">architecture</span>
+                Design
+            </button>
+</div>
+<!-- Library Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+<!-- Card 1 -->
+<div class="group flex flex-col gap-4 border border-gray-100 dark:border-gray-800 p-3 rounded-2xl hover:border-sand transition-all bg-white dark:bg-background-dark">
+<div class="relative w-full aspect-[4/5] bg-center bg-cover rounded-xl overflow-hidden shadow-sm" data-alt="Close up of birch tree white bark" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDYxnuwY7Z5JKsp5b0y_SWyscJe_O65Gd7jNZd8fLp5cQKCdLTxcUDZVoYVwaXNJ9j7BhYCeuvgfbt7_oaAZWRN4AZ9ho5qkL1R3QnaqzA4GqKpWTdVGNEUygpcn-33MZeODiJPsflKQZWxyNqlJmG2hJjcNjwQnIrD2Lh2rkRWJkDfUfVR15OWagixAB2teEToy8QIp9r4LLF95cRllnim7tozTrMlSLakClN3_HyMh4w1CGvhuu86VVUg9Z35bopzSGVJneVcA18q");'>
+<div class="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="px-2 pb-2">
+<h3 class="font-serif text-xl font-normal mb-1">The Birch Collective</h3>
+<div class="flex justify-between items-center text-[11px] text-forest-muted font-bold uppercase tracking-wider mb-3">
+<span>Oct 2023</span>
+<span class="bg-sand/30 px-2 py-0.5 rounded text-primary">Forestry</span>
+</div>
+<div class="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 80%"></div>
+</div>
+<p class="text-[10px] text-forest-muted mt-2">Reading progress: 80%</p>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group flex flex-col gap-4 border border-gray-100 dark:border-gray-800 p-3 rounded-2xl hover:border-sand transition-all bg-white dark:bg-background-dark">
+<div class="relative w-full aspect-[4/5] bg-center bg-cover rounded-xl overflow-hidden shadow-sm" data-alt="Vibrant green moss on dark rocks" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCsn4YmlBF4GO_al7MTdc2k__vPQ5rUY9B_S9sr6dKhwQSU8Pa2qSwHgGFdVr9q1l4alNXIURylS_VMjWoJ-dBom8SoawrI7LJW94uhriYddIlwb6n3rhVXTX9mXonuoeCQsatb7VqR0zFBqoKTwMp_0G8ac-0-Ql7U3p295bN9ttujbw2GooMAdY0E-zTtxTpZn7-eCO7UaHIyl5uE3rThmYBXoYRLDk4IOJvM-nwucM4WEy57IXTBDHp0v87KtxGYtgzlrEi1u4B8");'>
+<div class="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="px-2 pb-2">
+<h3 class="font-serif text-xl font-normal mb-1">Moss Patterns</h3>
+<div class="flex justify-between items-center text-[11px] text-forest-muted font-bold uppercase tracking-wider mb-3">
+<span>Sep 2023</span>
+<span class="bg-sand/30 px-2 py-0.5 rounded text-primary">Photography</span>
+</div>
+<div class="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 45%"></div>
+</div>
+<p class="text-[10px] text-forest-muted mt-2">Reading progress: 45%</p>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="group flex flex-col gap-4 border border-gray-100 dark:border-gray-800 p-3 rounded-2xl hover:border-sand transition-all bg-white dark:bg-background-dark">
+<div class="relative w-full aspect-[4/5] bg-center bg-cover rounded-xl overflow-hidden shadow-sm" data-alt="Faint sunlight filtering through pine trees" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCV9gek8R_aqrchOZFWIBzCQQFRWf9IRF8Y3sPgobzUaVBYmWHh5VPh15uvPhrRME843iuqyJoK6-LyrGfk8vt_x9XBA1EIip_9HLne4RaWEfGN2ad4hXWCW9acRiD-qpU9X4Sk1TCuLAGjeaJrxRHrnUJXhExLk_v7M1ay3Eag8D86NevSj7fd7k48xFWcuzBmgm03msFkAqb6o7GR8moULNtuAHKK0ajiG2sp-2sueRkkie7bWFOHpw9PGU1nStdRjhg05JCJ2b0r");'>
+<div class="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors"></div>
+<div class="absolute top-4 right-4 bg-primary text-white size-8 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">check</span>
+</div>
+</div>
+<div class="px-2 pb-2">
+<h3 class="font-serif text-xl font-normal mb-1">Nordic Light</h3>
+<div class="flex justify-between items-center text-[11px] text-forest-muted font-bold uppercase tracking-wider mb-3">
+<span>Aug 2023</span>
+<span class="bg-sand/30 px-2 py-0.5 rounded text-primary">Design</span>
+</div>
+<div class="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 100%"></div>
+</div>
+<p class="text-[10px] text-forest-muted mt-2">Finished</p>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="group flex flex-col gap-4 border border-gray-100 dark:border-gray-800 p-3 rounded-2xl hover:border-sand transition-all bg-white dark:bg-background-dark">
+<div class="relative w-full aspect-[4/5] bg-center bg-cover rounded-xl overflow-hidden shadow-sm" data-alt="Dramatic mountain shadows at dusk" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAm8sRSoiu0s-h0FOpWhGhmJZ0V6shkuIN2G-NFfdKsVdyJyNrDlc7fLi-fppb_GL2xke_Jl4hBxMKPzLO3xZ0MtZbLNj0TyywmNCRJ1GzxyTYg_xIpl4bQEUO2WJQBJgUOVHQrYhwZ6-R9mg1qGKCsoNTi8kLFGVT43IaQvs4vWSnSP7x4dyA1QKbCP3n6zpJLMdx3Q-qhP_gAxbjNCsRPpwnZnrDO4A2GeLO7QdPPMP-enfoFTn5IBKJA4iDBGyH2dpObhxVTmf8E");'>
+<div class="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors"></div>
+</div>
+<div class="px-2 pb-2">
+<h3 class="font-serif text-xl font-normal mb-1">Silvian Shadows</h3>
+<div class="flex justify-between items-center text-[11px] text-forest-muted font-bold uppercase tracking-wider mb-3">
+<span>Jul 2023</span>
+<span class="bg-sand/30 px-2 py-0.5 rounded text-primary">Essays</span>
+</div>
+<div class="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 20%"></div>
+</div>
+<p class="text-[10px] text-forest-muted mt-2">Reading progress: 20%</p>
+</div>
+</div>
+</div>
+<!-- Footer Pagination Style -->
+<footer class="mt-12 mb-8 border-t border-gray-100 dark:border-gray-800 pt-8 flex items-center justify-between">
+<p class="text-forest-muted text-xs font-medium">Showing 8 of 42 collections</p>
+<div class="flex gap-2">
+<button class="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-primary">chevron_left</span>
+</button>
+<button class="bg-primary text-white size-10 rounded-lg flex items-center justify-center font-bold text-sm">1</button>
+<button class="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center font-medium text-sm transition-colors">2</button>
+<button class="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center font-medium text-sm transition-colors">3</button>
+<button class="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-primary">chevron_right</span>
+</button>
+</div>
+</footer>
+</main>
+</div>
+</body></html>

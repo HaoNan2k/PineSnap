@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nordic Socratic Card - Question State</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2c4e37",
+                        "forest": "#2D4F38",
+                        "background-light": "#FAFAF9",
+                        "background-dark": "#161c18",
+                        "background": "#FAFAF9",
+                        "sand": "#D4C5A9",
+                        "forest-muted": "#6e7c73",
+                        "text-main": "#1C1C1E",
+                        "text-secondary": "#575757",
+                        "success": "#3E6B4D",
+                        "card": "#FFFFFF",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"],
+                        "serif": ["Merriweather", "serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FAFAF9;
+        }
+        .option-tile {
+            transition: all 0.2s cubic-bezier(0.2, 0.0, 0.0, 1.0);
+            border: 1px solid #D4C5A9;
+        }
+        .option-tile:hover {
+            border-color: #2D4F38;background-color: rgba(45, 79, 56, 0.02);transform: translateY(-1px);
+        }
+        .option-tile:active {
+            transform: translateY(0px);
+            background-color: rgba(45, 79, 56, 0.05);
+        }
+        input[type="radio"] + div .radio-circle {
+            border-color: #D4C5A9;
+            background-color: transparent;
+        }
+        input[type="radio"]:checked + div {
+            border-color: #2D4F38;
+            background-color: rgba(45, 79, 56, 0.05);
+            border-width: 1px;box-shadow: 0 0 0 1px #2D4F38;
+        }
+        input[type="radio"]:checked + div .radio-circle {
+            border-color: #2D4F38;
+            background-color: #2D4F38;
+        }
+        input[type="radio"]:checked + div .radio-circle::after {
+            content: '';
+            display: block;
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            position: relative;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .material-symbols-rounded {
+          font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen flex flex-col text-text-main transition-colors duration-200">
+<header class="w-full px-6 py-4 flex items-center justify-between sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-sand/20">
+<div class="flex items-center gap-3">
+<div class="size-9 text-forest flex items-center justify-center bg-white rounded-lg shadow-sm border border-sand/40">
+<span class="material-symbols-rounded text-[22px]">spa</span>
+</div>
+<span class="font-bold text-lg tracking-tight text-forest">PineSnap</span>
+</div>
+<div class="flex gap-4 items-center">
+<div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-sand/40 shadow-sm text-text-secondary">
+<span class="material-symbols-rounded text-orange-500 text-[20px] icon-filled">local_fire_department</span>
+<span class="text-sm font-semibold text-text-main">12</span>
+</div>
+<button class="size-9 rounded-full overflow-hidden border border-sand/40 shadow-sm transition-transform hover:scale-105">
+<img alt="User Profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrNjTkP4u-9un45nMLX56-D2f1Wr1xxoQuQju-IXj7PWOcRm3k7plAXA6TK9XyPHEMYE0pVtta4grN5-qY5tAoZLHn1GLSFJrh6qvPu_IkWXgMofiMXJ08cKuDJBvpWeljx9v7Enwr_ZieGhe6Jp1s40pMv2f8qJ3GsCMpg8J4vuJ8RVGK_SNIMoXLq9fJW7nCMGC63GttIPFkIsazhWcjnMIZQrrP8_L8MHQP1j9z5UC1hNGWL0nAnVYFcq9K5DtD2gMncPiVJ3-t"/>
+</button>
+</div>
+</header>
+<main class="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 relative">
+<div class="fixed top-[73px] left-6 z-10">
+<button class="text-text-secondary/60 hover:text-forest transition-all flex items-center justify-center rounded-xl w-10 h-10 hover:bg-sand/20 border border-transparent hover:border-sand/40 group" title="Close practice" type="button">
+<span class="material-symbols-rounded text-[28px]">close</span>
+</button>
+</div>
+<div class="w-full max-w-[600px] bg-card rounded-2xl shadow-xl border border-gray-100 p-8 sm:p-10 relative overflow-hidden z-0">
+<div class="flex flex-col gap-3 mb-8">
+<div class="flex items-center gap-2 text-forest/80 uppercase tracking-widest text-xs font-bold font-sans">
+<span class="material-symbols-rounded text-sm">menu_book</span>
+<span>Concept Context</span>
+</div>
+<div class="relative pl-4 border-l-2 border-sand/50">
+<p class="font-serif italic text-text-secondary text-lg leading-relaxed">
+                        "React's Virtual DOM is often misunderstood as being faster than the real DOM."
+                    </p>
+</div>
+</div>
+<div class="mb-8">
+<h1 class="font-serif text-2xl font-bold leading-snug text-text-main">
+                    Why do we actually use the Virtual DOM if direct DOM manipulation can be faster?
+                </h1>
+</div>
+<div class="flex flex-col gap-3 font-sans">
+<label class="relative cursor-pointer group/label">
+<input class="peer sr-only" name="answer" type="radio"/>
+<div class="option-tile bg-white w-full p-4 rounded-2xl flex items-center gap-4 group-hover/label:border-forest text-text-main">
+<div class="flex-shrink-0 size-5 rounded-full border border-sand radio-circle transition-all duration-200 relative"></div>
+<span class="text-base font-medium">
+                            It is always faster in every benchmark.
+                        </span>
+<div class="ml-auto opacity-0 group-hover/label:opacity-100 transition-opacity duration-200 text-forest/40">
+<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-background border border-sand">A</span>
+</div>
+</div>
+</label>
+<label class="relative cursor-pointer group/label">
+<input class="peer sr-only" name="answer" type="radio"/>
+<div class="option-tile bg-white w-full p-4 rounded-2xl flex items-center gap-4 group-hover/label:border-forest text-text-main">
+<div class="flex-shrink-0 size-5 rounded-full border border-sand radio-circle transition-all duration-200 relative"></div>
+<span class="text-base font-medium">
+                            It allows for a declarative API and batch updates, improving maintainability.
+                        </span>
+<div class="ml-auto opacity-0 group-hover/label:opacity-100 transition-opacity duration-200 text-forest/40">
+<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-background border border-sand">B</span>
+</div>
+</div>
+</label>
+<label class="relative cursor-pointer group/label">
+<input class="peer sr-only" name="answer" type="radio"/>
+<div class="option-tile bg-white w-full p-4 rounded-2xl flex items-center gap-4 group-hover/label:border-forest text-text-main">
+<div class="flex-shrink-0 size-5 rounded-full border border-sand radio-circle transition-all duration-200 relative"></div>
+<span class="text-base font-medium">
+                            It consumes less memory.
+                        </span>
+<div class="ml-auto opacity-0 group-hover/label:opacity-100 transition-opacity duration-200 text-forest/40">
+<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-background border border-sand">C</span>
+</div>
+</div>
+</label>
+</div>
+<div class="mt-10 flex items-center justify-between pt-6 border-t border-gray-100">
+<button class="flex items-center gap-2 text-gray-400 hover:text-forest font-semibold text-sm transition-colors px-2 py-2 rounded-lg hover:bg-gray-50">
+<span class="material-symbols-rounded text-[20px]">flag</span>
+<span>Report issue</span>
+</button>
+<button class="flex items-center justify-center h-10 px-6 bg-background hover:bg-gray-100 text-text-main text-sm font-bold rounded-xl transition-colors border border-sand/50">
+                    Skip Question
+                </button>
+</div>
+</div>
+<div class="mt-8 text-center text-text-secondary/50 text-xs font-medium font-sans">
+            Press <kbd class="font-mono bg-white border border-sand/40 px-1.5 py-0.5 rounded text-forest/80 shadow-sm">Esc</kbd> to quit practice
+        </div>
+</main>
+
+</body></html>
