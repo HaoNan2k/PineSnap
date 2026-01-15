@@ -7,6 +7,9 @@ import { Toaster } from "sonner";
 export const metadata: Metadata = {
   title: "PineSnap - Nordic Learning",
   description: "Transform content into active knowledge",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
