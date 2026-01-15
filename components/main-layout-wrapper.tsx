@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { UserMenu } from "@/components/user/user-menu";
 
 const navItems = [
   { href: "/sources", label: "素材", icon: "inbox" },
@@ -28,7 +29,7 @@ function MainSidebar() {
         {/* Brand */}
         <Link href="/sources" className="flex items-center gap-3">
           <div className="bg-primary size-10 rounded-xl flex items-center justify-center text-white">
-            <span className="material-symbols-rounded text-2xl">filter_hdr</span>
+            <span className="material-symbols-rounded text-2xl">spa</span>
           </div>
           <div className="flex flex-col">
             <h1 className="text-primary dark:text-white text-lg font-bold leading-none">
@@ -76,27 +77,7 @@ function MainSidebar() {
 
       {/* Sidebar Footer */}
       <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          aria-disabled="true"
-          className="flex items-center gap-4 px-4 py-3 rounded-xl text-forest-muted transition-colors cursor-not-allowed opacity-60"
-        >
-          <span className="material-symbols-rounded text-xl">settings</span>
-          <span className="text-sm font-medium">设置</span>
-        </button>
-
-        {/* User Profile */}
-        <div className="mt-4 px-4 flex items-center gap-3">
-          <div className="size-8 rounded-full bg-sand/30 flex items-center justify-center">
-            <span className="material-symbols-rounded text-sm text-forest-muted">
-              person
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <p className="text-xs font-bold">访客用户</p>
-            <p className="text-[10px] text-forest-muted italic">v1.0.4</p>
-          </div>
-        </div>
+        <UserMenu variant="sidebar" loginHref="/sources" />
       </div>
     </aside>
   );
