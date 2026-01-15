@@ -77,13 +77,7 @@ export function SourceList() {
 function ResourceCard({
   resource,
 }: {
-  resource: {
-    id: string;
-    type: string;
-    title: string;
-    externalId: string | null;
-    createdAt: Date;
-  };
+  resource: ResourceList[number];
 }) {
   const sourceLabel = getSourceLabel(resource.type);
   const dateFormatted = format(new Date(resource.createdAt), "M月d日", {
