@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 
 export function LearnHeader() {
   return (
@@ -9,9 +10,14 @@ export function LearnHeader() {
         <div
           className="size-9 text-primary flex items-center justify-center bg-white rounded-xl shadow-sm border border-sand/40 group-hover:bg-sand/10 transition-colors"
         >
-          <span className="material-symbols-rounded text-xl icon-filled">
-            spa
-          </span>
+          <Image
+            src="/brand-icon.svg"
+            alt="PineSnap"
+            className="h-5 w-5"
+            width={20}
+            height={20}
+            draggable={false}
+          />
         </div>
         <span className="font-bold text-lg tracking-tight text-primary">
           PineSnap

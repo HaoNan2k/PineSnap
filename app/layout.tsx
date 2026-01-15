@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: "PineSnap - Nordic Learning",
   description: "Transform content into active knowledge",
   icons: {
-    icon: "/logo.svg",
+    icon: "/brand-icon.svg",
   },
 };
 

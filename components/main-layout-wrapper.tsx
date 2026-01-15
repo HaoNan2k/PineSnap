@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/user/user-menu";
@@ -29,7 +30,14 @@ function MainSidebar() {
         {/* Brand */}
         <Link href="/sources" className="flex items-center gap-3">
           <div className="bg-primary size-10 rounded-xl flex items-center justify-center text-white">
-            <span className="material-symbols-rounded text-2xl">spa</span>
+            <Image
+              src="/brand-icon.svg"
+              alt="PineSnap"
+              className="h-6 w-6 invert"
+              width={24}
+              height={24}
+              draggable={false}
+            />
           </div>
           <div className="flex flex-col">
             <h1 className="text-primary dark:text-white text-lg font-bold leading-none">
