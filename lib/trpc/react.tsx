@@ -5,6 +5,8 @@ import { httpBatchLink } from "@trpc/client";
 import { useState } from "react";
 import { trpc } from "./client";
 
+export { trpc };
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

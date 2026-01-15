@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>PineSnap - Nordic Forest Collection</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet"/>
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2c4e37",
+                        "forest": "#2D4F38",
+                        "background-light": "#FAFAF9",
+                        "background-dark": "#161c18",
+                        "sand": "#D4C5A9",
+                        "forest-muted": "#6e7c73",
+                        "text-main": "#1C1C1E",
+                        "text-secondary": "#575757",
+                        "success": "#3E6B4D",
+                        "card": "#FFFFFF",
+                        "background": "#FAFAF9",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"],
+                        "serif": ["Merriweather", "serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .no-scrollbar::-webkit-scrollbar { display: none; }
+            .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-nav .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        .option-tile {
+            transition: all 0.2s cubic-bezier(0.2, 0.0, 0.0, 1.0);
+            border: 1px solid #D4C5A9;
+        }
+        .option-tile:hover {
+            border-color: #2D4F38; background-color: rgba(45, 79, 56, 0.02); transform: translateY(-1px);
+        }
+        input[type="radio"]:checked + div {
+            border-color: #2D4F38;
+            background-color: rgba(45, 79, 56, 0.05);
+            border-width: 1px; box-shadow: 0 0 0 1px #2D4F38;
+        }
+        input[type="radio"]:checked + div .radio-circle {
+            border-color: #2D4F38;
+            background-color: #2D4F38;
+        }
+        input[type="radio"]:checked + div .radio-circle::after {
+            content: ''; display: block; width: 8px; height: 8px; background: white; border-radius: 50%;
+            position: relative; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        }
+        .feedback-gradient {
+            background: linear-gradient(180deg, rgba(62, 107, 77, 0.05) 0%, rgba(250, 250, 249, 0) 100%);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-[#131614] dark:text-[#f1f3f2] antialiased">
+    <div id="root"></div>
+    <!-- Note: class is used on body as it's plain HTML, not JSX -->
+
+    <!-- React Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+        // --- Shared Components ---
+
+        const Sidebar = () => {
+            const location = useLocation();
+            const isActive = (path) => location.pathname === path;
+
+            return (
+                <aside className="w-72 border-r border-gray-200 dark:border-gray-800 h-screen sticky top-0 flex flex-col justify-between bg-background-light dark:bg-background-dark p-8">
+                    <div className="flex flex-col gap-10">
+                        <Link to="/" className="flex items-center gap-3">
+                            <div className="bg-primary size-10 rounded-xl flex items-center justify-center text-white">
+                                <span className="material-symbols-outlined">filter_hdr</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <h1 className="text-primary dark:text-[#f1f3f2] text-lg font-bold leading-none">PineSnap</h1>
+                                <p className="text-forest-muted text-xs font-medium uppercase tracking-widest mt-1">Nordic Edition</p>
+                            </div>
+                        </Link>
+                        <nav className="flex flex-col gap-2">
+                            <Link to="/inbox" className={`${isActive('/inbox') ? 'active-nav bg-primary/10 text-primary dark:bg-primary dark:text-white' : 'text-forest-muted hover:bg-sand/10'} flex items-center gap-4 px-4 py-3 rounded-xl transition-colors`}>
+                                <span className="material-symbols-outlined">inbox</span>
+                                <span className="text-sm font-bold">Inbox</span>
+                            </Link>
+                            <Link to="/" className={`${isActive('/') ? 'active-nav bg-primary/10 text-primary dark:bg-primary dark:text-white' : 'text-forest-muted hover:bg-sand/10'} flex items-center gap-4 px-4 py-3 rounded-xl transition-colors`}>
+                                <span className="material-symbols-outlined">auto_stories</span>
+                                <span className="text-sm font-bold">Library</span>
+                            </Link>
+                            <a className="flex items-center gap-4 px-4 py-3 rounded-lg text-forest-muted hover:bg-sand/10 transition-colors" href="#">
+                                <span className="material-symbols-outlined">cloud_circle</span>
+                                <span className="text-sm font-medium">Memories</span>
+                            </a>
+                            <div className="mt-8 mb-4">
+                                <p className="px-4 text-[10px] font-bold text-forest-muted uppercase tracking-[0.2em]">Collections</p>
+                            </div>
+                            <a className="flex items-center gap-4 px-4 py-2 text-forest-muted hover:text-primary transition-colors" href="#">
+                                <span className="size-2 rounded-full bg-sand"></span>
+                                <span className="text-sm">Pine Series</span>
+                            </a>
+                            <a className="flex items-center gap-4 px-4 py-2 text-forest-muted hover:text-primary transition-colors" href="#">
+                                <span className="size-2 rounded-full bg-forest-muted"></span>
+                                <span className="text-sm">Birch Archives</span>
+                            </a>
+                            <a className="flex items-center gap-4 px-4 py-2 text-forest-muted hover:text-primary transition-colors" href="#">
+                                <span className="size-2 rounded-full bg-primary/40"></span>
+                                <span className="text-sm">Moss Patterns</span>
+                            </a>
+                        </nav>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <a className="flex items-center gap-4 px-4 py-3 rounded-lg text-forest-muted hover:bg-sand/10 transition-colors" href="#">
+                            <span className="material-symbols-outlined text-[20px]">settings</span>
+                            <span className="text-sm font-medium">Settings</span>
+                        </a>
+                        <div className="mt-4 px-4 flex items-center gap-3">
+                            <div className="size-8 rounded-full bg-sand/30 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-sm">person</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <p className="text-xs font-bold">Erik Sørensen</p>
+                                <p className="text-[10px] text-forest-muted italic">v1.0.4 Premium</p>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            );
+        };
+
+        const SimpleHeader = ({ title }) => {
+            return (
+                <header className="w-full px-6 py-4 flex items-center justify-between sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-sand/20">
+                    <div className="flex items-center gap-3">
+                        <div className="size-9 text-forest flex items-center justify-center bg-white rounded-lg shadow-sm border border-sand/40">
+                            <span className="material-symbols-rounded text-[22px] icon-filled">spa</span>
+                        </div>
+                        <span className="font-bold text-lg tracking-tight text-forest">{title}</span>
+                    </div>
+                    <div className="flex gap-4 items-center">
+                        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-sand/40 shadow-sm text-text-secondary">
+                            <span className="material-symbols-rounded text-orange-500 text-[20px] icon-filled">local_fire_department</span>
+                            <span className="text-sm font-semibold text-text-main">12</span>
+                        </div>
+                        <button className="size-9 rounded-full overflow-hidden border border-sand/40 shadow-sm transition-transform hover:scale-105">
+                            <img alt="User Profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrNjTkP4u-9un45nMLX56-D2f1Wr1xxoQuQju-IXj7PWOcRm3k7plAXA6TK9XyPHEMYE0pVtta4grN5-qY5tAoZLHn1GLSFJrh6qvPu_IkWXgMofiMXJ08cKuDJBvpWeljx9v7Enwr_ZieGhe6Jp1s40pMv2f8qJ3GsCMpg8J4vuJ8RVGK_SNIMoXLq9fJW7nCMGC63GttIPFkIsazhWcjnMIZQrrP8_L8MHQP1j9z5UC1hNGWL0nAnVYFcq9K5DtD2gMncPiVJ3-t"/>
+                        </button>
+                    </div>
+                </header>
+            );
+        }
+
+        // --- Screens ---
+
+        const LibraryPage = () => {
+            const navigate = useNavigate();
+            const cards = [
+                { id: 1, title: "The Birch Collective", tag: "Forestry", date: "Oct 2023", progress: 80, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDYxnuwY7Z5JKsp5b0y_SWyscJe_O65Gd7jNZd8fLp5cQKCdLTxcUDZVoYVwaXNJ9j7BhYCeuvgfbt7_oaAZWRN4AZ9ho5qkL1R3QnaqzA4GqKpWTdVGNEUygpcn-33MZeODiJPsflKQZWxyNqlJmG2hJjcNjwQnIrD2Lh2rkRWJkDfUfVR15OWagixAB2teEToy8QIp9r4LLF95cRllnim7tozTrMlSLakClN3_HyMh4w1CGvhuu86VVUg9Z35bopzSGVJneVcA18q" },
+                { id: 2, title: "Moss Patterns", tag: "Photography", date: "Sep 2023", progress: 45, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCsn4YmlBF4GO_al7MTdc2k__vPQ5rUY9B_S9sr6dKhwQSU8Pa2qSwHgGFdVr9q1l4alNXIURylS_VMjWoJ-dBom8SoawrI7LJW94uhriYddIlwb6n3rhVXTX9mXonuoeCQsatb7VqR0zFBqoKTwMp_0G8ac-0-Ql7U3p295bN9ttujbw2GooMAdY0E-zTtxTpZn7-eCO7UaHIyl5uE3rThmYBXoYRLDk4IOJvM-nwucM4WEy57IXTBDHp0v87KtxGYtgzlrEi1u4B8" },
+                { id: 3, title: "Nordic Light", tag: "Design", date: "Aug 2023", progress: 100, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCV9gek8R_aqrchOZFWIBzCQQFRWf9IRF8Y3sPgobzUaVBYmWHh5VPh15uvPhrRME843iuqyJoK6-LyrGfk8vt_x9XBA1EIip_9HLne4RaWEfGN2ad4hXWCW9acRiD-qpU9X4Sk1TCuLAGjeaJrxRHrnUJXhExLk_v7M1ay3Eag8D86NevSj7fd7k48xFWcuzBmgm03msFkAqb6o7GR8moULNtuAHKK0ajiG2sp-2sueRkkie7bWFOHpw9PGU1nStdRjhg05JCJ2b0r" },
+                { id: 4, title: "Silvian Shadows", tag: "Essays", date: "Jul 2023", progress: 20, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAm8sRSoiu0s-h0FOpWhGhmJZ0V6shkuIN2G-NFfdKsVdyJyNrDlc7fLi-fppb_GL2xke_Jl4hBxMKPzLO3xZ0MtZbLNj0TyywmNCRJ1GzxyTYg_xIpl4bQEUO2WJQBJgUOVHQrYhwZ6-R9mg1qGKCsoNTi8kLFGVT43IaQvs4vWSnSP7x4dyA1QKbCP3n6zpJLMdx3Q-qhP_gAxbjNCsRPpwnZnrDO4A2GeLO7QdPPMP-enfoFTn5IBKJA4iDBGyH2dpObhxVTmf8E" },
+                { id: 5, title: "Winter Growth", tag: "Forestry", date: "Jun 2023", progress: 60, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuA79cEwKqVYXmKcBtkItOVu9piQOeDa8ceDhUcB7Q0N9Vj44wa77TPrFlpS4lOoN-mV-cfeS7M5yN9PzGOxHam3qVOxkfDXl7yaP8ql4bfWHb0ho6wAepwaxu9JiWZ7asBxr3pvRx1adn2BABGBlEshVZAxvNOSQBzFfXs6KE1O_ir2H2U4iExbu9iKasEaNa7P2krWFWYzJCoYCz-RzSvIk769k87Hp4ebs10tLOgkpa_klJCDcI4-C9aO9JE4FbXZYL4pphXk7Pcy" },
+                { id: 6, title: "Root Systems", tag: "Science", date: "May 2023", progress: 10, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDHPPAjJWtkCCd4v2eQc5Rpr6X8Htt4EwVTvHPxdxemHIks3xOpq4oi-WtZf5msZ6xn9VM5lXHNESI1_etd2Cb7w-Ord6fwaKGO55HYPODSp0LHmABHHAqtwmkNtxhc76QGluyYpJ9Y-0i0gFUTA_xDVrHgzINOoOgAf1QM1-HNl0KVZWskBvc2aQuY8yv-2Fjq39uRg1ebx78y29wmaDI_SykuHvUYDFFxbeQHmtZNeOR6JOsuTIU7PcqgB_iNjxWi1dHqx-YRWEkE" },
+                { id: 7, title: "Atmospheric Pine", tag: "Photography", date: "Apr 2023", progress: 95, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCFL23RsEQurcV3yCYX3T6YQdvgBKk0XOTNIgXcDDpR1VNtgQ80p1TEheQtD2Mj3r58bwfqAtint9KtwVO043bQVbQLsPd-qIQbO7KOSoN869fzjrt2jIvkA7j7jj62F3lgIV3THSLaHEWRvn_P7pFg13n1uyGqYfohYpiV15q0ikGnG55rUSu555YVGcvgqMiHrY20b6zjjGtTLbVVN318-dcA1G-VxR2NGPlaPJWURVMiT-VPDKnJ0zgI-emgUIxHK9VEYe098xP_" },
+                { id: 8, title: "Tundra Flora", tag: "Botany", date: "Mar 2023", progress: 30, img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDV21RKgJ-qY-JYcHF6JZ6AIha8beZDLJzE8s9pJY6mrC-vdPd3WQQmmH0VL1voZKLxQqw3k32ZrrO51ImRDa4dE4T9qyYbxrTX6RJypJa1f9T5BEln1xHEpzZq9XTEoikEjiPyNE2Ef6FUwsaRwtZHK-J9Mydz3HCMX6H0_4w15oOY8RYv2HB3Pq8iqsoxB9YpVyLahSEjTfGUVp9oOESsKuVIfNoNupBfeW_ScdG4emRE_xBJ6R5k47dYrr8zbQeAJL8Bx0A3fOs8" }
+            ];
+
+            return (
+                <div className="flex min-h-screen">
+                    <Sidebar />
+                    <main className="flex-1 px-12 py-12 flex flex-col gap-8">
+                        <header className="flex flex-wrap items-end justify-between gap-6">
+                            <div className="flex flex-col gap-2">
+                                <h2 className="font-serif text-5xl font-normal text-primary dark:text-[#f1f3f2]">Your Library</h2>
+                                <p className="text-forest-muted font-display text-sm tracking-wide">Explore your curated Nordic collection</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="relative min-w-[320px]">
+                                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-forest-muted text-[20px]">search</span>
+                                    <input className="w-full bg-sand/10 dark:bg-white/5 border-none focus:ring-1 focus:ring-primary rounded-xl pl-12 pr-4 py-3 text-sm placeholder:text-forest-muted/60 placeholder:font-medium" placeholder="Search your collection..." type="text"/>
+                                </div>
+                                <button className="bg-primary text-white size-12 rounded-xl flex items-center justify-center hover:opacity-90 transition-opacity" aria-label="Add new item">
+                                    <span className="material-symbols-outlined">add</span>
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                            {['All Items', 'Photography', 'Essays', 'Forestry', 'Design'].map((label, idx) => (
+                                <button key={label} className={`flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-full px-6 text-sm font-medium transition-colors ${idx === 0 ? 'bg-primary text-white' : 'bg-sand/20 dark:bg-white/10 text-[#131614] dark:text-[#f1f3f2] hover:bg-sand/30'}`}>
+                                    {idx === 0 && <span className="material-symbols-outlined text-[18px]">done</span>}
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                            {cards.map(card => (
+                                <div onClick={() => navigate('/practice')} key={card.id} className="group flex flex-col gap-4 border border-gray-100 dark:border-gray-800 p-3 rounded-2xl hover:border-sand transition-all bg-white dark:bg-background-dark cursor-pointer">
+                                    <div className="relative w-full aspect-[4/5] bg-center bg-cover rounded-xl overflow-hidden shadow-sm" style={{backgroundImage: `url("${card.img}")`}}>
+                                        <div className="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors"></div>
+                                        {card.progress === 100 && (
+                                            <div className="absolute top-4 right-4 bg-primary text-white size-8 rounded-full flex items-center justify-center">
+                                                <span className="material-symbols-outlined text-sm">check</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="px-2 pb-2">
+                                        <h3 className="font-serif text-xl font-normal mb-1">{card.title}</h3>
+                                        <div className="flex justify-between items-center text-[11px] text-forest-muted font-bold uppercase tracking-wider mb-3">
+                                            <span>{card.date}</span>
+                                            <span className="bg-sand/30 px-2 py-0.5 rounded text-primary">{card.tag}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 dark:bg-gray-800 h-1 rounded-full overflow-hidden">
+                                            <div className="bg-primary h-full rounded-full" style={{width: `${card.progress}%`}}></div>
+                                        </div>
+                                        <p className="text-[10px] text-forest-muted mt-2">
+                                            {card.progress === 100 ? 'Finished' : `Reading progress: ${card.progress}%`}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <footer className="mt-12 mb-8 border-t border-gray-100 dark:border-gray-800 pt-8 flex items-center justify-between">
+                            <p className="text-forest-muted text-xs font-medium">Showing 8 of 42 collections</p>
+                            <div className="flex gap-2">
+                                <button className="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center transition-colors">
+                                    <span className="material-symbols-outlined text-primary">chevron_left</span>
+                                </button>
+                                <button className="bg-primary text-white size-10 rounded-lg flex items-center justify-center font-bold text-sm">1</button>
+                                <button className="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center font-medium text-sm transition-colors">2</button>
+                                <button className="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center font-medium text-sm transition-colors">3</button>
+                                <button className="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center transition-colors">
+                                    <span className="material-symbols-outlined text-primary">chevron_right</span>
+                                </button>
+                            </div>
+                        </footer>
+                    </main>
+                </div>
+            );
+        };
+
+        const InboxPage = () => {
+            const items = [
+                { id: 1, source: "Unsplash", date: "Oct 24, 2023", title: "Morning Dew on Pine Needles", desc: "Found this collection while browsing for winter textures.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDYxnuwY7Z5JKsp5b0y_SWyscJe_O65Gd7jNZd8fLp5cQKCdLTxcUDZVoYVwaXNJ9j7BhYCeuvgfbt7_oaAZWRN4AZ9ho5qkL1R3QnaqzA4GqKpWTdVGNEUygpcn-33MZeODiJPsflKQZWxyNqlJmG2hJjcNjwQnIrD2Lh2rkRWJkDfUfVR15OWagixAB2teEToy8QIp9r4LLF95cRllnim7tozTrMlSLakClN3_HyMh4w1CGvhuu86VVUg9Z35bopzSGVJneVcA18q" },
+                { id: 2, source: "Bilibili", date: "Oct 23, 2023", title: "Moss Texture Variations", desc: "Video reference for ground cover patterns in northern climates.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCsn4YmlBF4GO_al7MTdc2k__vPQ5rUY9B_S9sr6dKhwQSU8Pa2qSwHgGFdVr9q1l4alNXIURylS_VMjWoJ-dBom8SoawrI7LJW94uhriYddIlwb6n3rhVXTX9mXonuoeCQsatb7VqR0zFBqoKTwMp_0G8ac-0-Ql7U3p295bN9ttujbw2GooMAdY0E-zTtxTpZn7-eCO7UaHIyl5uE3rThmYBXoYRLDk4IOJvM-nwucM4WEy57IXTBDHp0v87KtxGYtgzlrEi1u4B8" },
+                { id: 3, source: "Pinterest", date: "Oct 22, 2023", title: "Sunlight Through Canopy", desc: "Lighting study for the upcoming project.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuCV9gek8R_aqrchOZFWIBzCQQFRWf9IRF8Y3sPgobzUaVBYmWHh5VPh15uvPhrRME843iuqyJoK6-LyrGfk8vt_x9XBA1EIip_9HLne4RaWEfGN2ad4hXWCW9acRiD-qpU9X4Sk1TCuLAGjeaJrxRHrnUJXhExLk_v7M1ay3Eag8D86NevSj7fd7k48xFWcuzBmgm03msFkAqb6o7GR8moULNtuAHKK0ajiG2sp-2sueRkkie7bWFOHpw9PGU1nStdRjhg05JCJ2b0r" },
+                { id: 4, source: "Medium", date: "Oct 20, 2023", title: "Mountain Shadow Theory", desc: "Article regarding shadow play in mountainous regions at dusk.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuAm8sRSoiu0s-h0FOpWhGhmJZ0V6shkuIN2G-NFfdKsVdyJyNrDlc7fLi-fppb_GL2xke_Jl4hBxMKPzLO3xZ0MtZbLNj0TyywmNCRJ1GzxyTYg_xIpl4bQEUO2WJQBJgUOVHQrYhwZ6-R9mg1qGKCsoNTi8kLFGVT43IaQvs4vWSnSP7x4dyA1QKbCP3n6zpJLMdx3Q-qhP_gAxbjNCsRPpwnZnrDO4A2GeLO7QdPPMP-enfoFTn5IBKJA4iDBGyH2dpObhxVTmf8E" },
+                { id: 5, source: "Instagram", date: "Oct 18, 2023", title: "Winter Sapling Protection", desc: "Guide on protecting young trees during heavy snowfall.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuA79cEwKqVYXmKcBtkItOVu9piQOeDa8ceDhUcB7Q0N9Vj44wa77TPrFlpS4lOoN-mV-cfeS7M5yN9PzGOxHam3qVOxkfDXl7yaP8ql4bfWHb0ho6wAepwaxu9JiWZ7asBxr3pvRx1adn2BABGBlEshVZAxvNOSQBzFfXs6KE1O_ir2H2U4iExbu9iKasEaNa7P2krWFWYzJCoYCz-RzSvIk769k87Hp4ebs10tLOgkpa_klJCDcI4-C9aO9JE4FbXZYL4pphXk7Pcy" },
+                { id: 6, source: "Web", date: "Oct 15, 2023", title: "Root System Diagrams", desc: "Scientific illustrations of Nordic tree root structures.", img: "https://lh3.googleusercontent.com/aida-public/AB6AXuDHPPAjJWtkCCd4v2eQc5Rpr6X8Htt4EwVTvHPxdxemHIks3xOpq4oi-WtZf5msZ6xn9VM5lXHNESI1_etd2Cb7w-Ord6fwaKGO55HYPODSp0LHmABHHAqtwmkNtxhc76QGluyYpJ9Y-0i0gFUTA_xDVrHgzINOoOgAf1QM1-HNl0KVZWskBvc2aQuY8yv-2Fjq39uRg1ebx78y29wmaDI_SykuHvUYDFFxbeQHmtZNeOR6JOsuTIU7PcqgB_iNjxWi1dHqx-YRWEkE" }
+            ];
+
+            return (
+                <div className="flex min-h-screen">
+                    <Sidebar />
+                    <main className="flex-1 px-12 py-12 flex flex-col gap-8">
+                        <header className="flex flex-wrap items-end justify-between gap-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                            <div className="flex flex-col gap-2">
+                                <h2 className="font-serif text-5xl font-normal text-primary dark:text-[#f1f3f2]">The Nursery</h2>
+                                <p className="text-forest-muted font-display text-sm tracking-wide">You have 12 items waiting to be planted.</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button className="text-forest-muted hover:text-primary text-sm font-medium flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-sand/10 transition-colors">
+                                    <span className="material-symbols-outlined text-[20px]">sort</span>
+                                    Sort by Date
+                                </button>
+                            </div>
+                        </header>
+                        <div className="flex flex-col gap-4">
+                            {items.map(item => (
+                                <div key={item.id} className="group flex items-center gap-6 p-4 rounded-2xl bg-white dark:bg-background-dark border border-gray-100 dark:border-gray-800 hover:border-sand transition-all shadow-sm hover:shadow-md">
+                                    <div className="relative size-20 shrink-0 bg-center bg-cover rounded-xl overflow-hidden" style={{backgroundImage: `url("${item.img}")`}}>
+                                        <div className="absolute inset-0 bg-black/5"></div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <span className="bg-sand/20 text-primary dark:text-sand text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded">From {item.source}</span>
+                                            <span className="text-[11px] text-forest-muted">Captured {item.date}</span>
+                                        </div>
+                                        <h3 className="font-serif text-lg text-[#131614] dark:text-[#f1f3f2] font-medium truncate">{item.title}</h3>
+                                        <p className="text-sm text-forest-muted truncate mt-0.5">{item.desc}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                                        <button className="px-5 py-2.5 rounded-xl border border-sand/50 text-forest-muted hover:bg-sand/10 hover:text-primary transition-colors text-sm font-medium">
+                                            Prune
+                                        </button>
+                                        <button className="px-6 py-2.5 rounded-xl bg-primary text-white hover:bg-primary/90 transition-colors text-sm font-medium shadow-sm flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-[18px]">clover_spark</span>
+                                            Plant
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-8 flex justify-center pb-8">
+                            <p className="text-forest-muted text-xs font-medium uppercase tracking-widest opacity-60">End of Nursery</p>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const QuestionPage = () => {
+            const navigate = useNavigate();
+            const [selected, setSelected] = useState(null);
+
+            const options = [
+                { id: 'A', text: "It is always faster in every benchmark." },
+                { id: 'B', text: "It allows for a declarative API and batch updates, improving maintainability." },
+                { id: 'C', text: "It consumes less memory." }
+            ];
+
+            const handleSubmit = () => {
+                if (selected === 'B') {
+                    navigate('/feedback');
+                } else if (selected) {
+                    alert("Try option B for the correct insight!");
+                }
+            };
+
+            return (
+                <div className="bg-background min-h-screen flex flex-col text-text-main">
+                    <SimpleHeader title="PineSnap" />
+                    <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 relative">
+                        <div className="fixed top-[73px] left-6 z-10">
+                            <button onClick={() => navigate('/')} className="text-text-secondary/60 hover:text-forest transition-all flex items-center justify-center rounded-xl w-10 h-10 hover:bg-sand/20 border border-transparent hover:border-sand/40 group" title="Close practice" aria-label="Close practice">
+                                <span className="material-symbols-rounded text-[28px]">close</span>
+                            </button>
+                        </div>
+                        <div className="w-full max-w-[600px] bg-card rounded-2xl shadow-xl border border-gray-100 p-8 sm:p-10 relative overflow-hidden z-0">
+                            <div className="flex flex-col gap-3 mb-8">
+                                <div className="flex items-center gap-2 text-forest/80 uppercase tracking-widest text-xs font-bold font-sans">
+                                    <span className="material-symbols-rounded text-sm">menu_book</span>
+                                    <span>Concept Context</span>
+                                </div>
+                                <div className="relative pl-4 border-l-2 border-sand/50">
+                                    <p className="font-serif italic text-text-secondary text-lg leading-relaxed">
+                                        "React's Virtual DOM is often misunderstood as being faster than the real DOM."
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mb-8">
+                                <h1 className="font-serif text-2xl font-bold leading-snug text-text-main">
+                                    Why do we actually use the Virtual DOM if direct DOM manipulation can be faster?
+                                </h1>
+                            </div>
+                            <div className="flex flex-col gap-3 font-sans">
+                                {options.map(opt => (
+                                    <label key={opt.id} className="relative cursor-pointer group/label">
+                                        <input 
+                                            className="peer sr-only" 
+                                            name="answer" 
+                                            type="radio" 
+                                            checked={selected === opt.id}
+                                            onChange={() => setSelected(opt.id)}
+                                        />
+                                        <div className="option-tile bg-white w-full p-4 rounded-2xl flex items-center gap-4 group-hover/label:border-forest text-text-main">
+                                            <div className="flex-shrink-0 size-5 rounded-full border border-sand radio-circle transition-all duration-200 relative"></div>
+                                            <span className="text-base font-medium">{opt.text}</span>
+                                            <div className="ml-auto opacity-0 group-hover/label:opacity-100 transition-opacity duration-200 text-forest/40">
+                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-background border border-sand">{opt.id}</span>
+                                            </div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                            <div className="mt-10 flex items-center justify-between pt-6 border-t border-gray-100">
+                                <button className="flex items-center gap-2 text-gray-400 hover:text-forest font-semibold text-sm transition-colors px-2 py-2 rounded-lg hover:bg-gray-50">
+                                    <span className="material-symbols-rounded text-[20px]">flag</span>
+                                    <span>Report issue</span>
+                                </button>
+                                <div className="flex gap-3">
+                                    <button onClick={() => navigate('/')} className="flex items-center justify-center h-10 px-6 bg-background hover:bg-gray-100 text-text-main text-sm font-bold rounded-xl transition-colors border border-sand/50">
+                                        Skip
+                                    </button>
+                                    <button onClick={handleSubmit} disabled={!selected} className={`flex items-center justify-center h-10 px-8 text-sm font-bold rounded-xl transition-colors ${selected ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                                        Confirm
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-8 text-center text-text-secondary/50 text-xs font-medium font-sans">
+                            Press <kbd className="font-mono bg-white border border-sand/40 px-1.5 py-0.5 rounded text-forest/80 shadow-sm">Esc</kbd> to quit practice
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const FeedbackPage = () => {
+            const navigate = useNavigate();
+            return (
+                <div className="bg-background min-h-screen flex flex-col text-text-main transition-colors duration-200">
+                    <SimpleHeader title="PineSnap" />
+                    <div className="w-full px-6 pt-6 flex justify-start">
+                        <button onClick={() => navigate('/')} className="text-text-secondary/70 hover:text-forest transition-all flex items-center justify-center rounded-full w-10 h-10 hover:bg-sand/20 group" title="Close Focus Mode" aria-label="Close Focus Mode">
+                            <span className="material-symbols-rounded text-[28px]">close</span>
+                        </button>
+                    </div>
+                    <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 -mt-12">
+                        <div className="w-full max-w-[600px] bg-card rounded-3xl shadow-xl border border-sand/20 overflow-hidden z-0">
+                            <div className="feedback-gradient p-8 sm:p-10 pb-0">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="size-10 rounded-full bg-success/10 text-success flex items-center justify-center">
+                                        <span className="material-symbols-rounded icon-filled">check_circle</span>
+                                    </div>
+                                    <span className="text-success font-bold uppercase tracking-widest text-sm font-sans">Insight Gained</span>
+                                </div>
+                                <div className="mb-8">
+                                    <h1 className="font-serif text-2xl font-bold leading-snug text-text-main">
+                                        The Virtual DOM is an abstraction for developer productivity.
+                                    </h1>
+                                </div>
+                            </div>
+                            <div className="px-8 sm:p-10 pt-2 pb-8">
+                                <div className="bg-background/50 rounded-2xl p-6 border border-sand/30 font-sans mb-8">
+                                    <h3 className="text-forest font-bold text-xs uppercase tracking-wider mb-3">The Nuance</h3>
+                                    <p className="text-text-secondary leading-relaxed text-base">
+                                        Direct DOM manipulation is technically faster in a vacuum, but the Virtual DOM allows React to <span className="text-forest font-semibold">batch updates</span> and minimize costly layout reflows automatically. It's about maintaining a <span className="italic font-serif">declarative API</span> without sacrificing perceived performance.
+                                    </p>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-4 p-4 rounded-xl bg-success/5 border border-success/20">
+                                        <span className="text-success material-symbols-rounded">verified</span>
+                                        <div className="text-sm">
+                                            <span className="font-bold text-text-main">Correct:</span>
+                                            <span className="text-text-secondary"> It allows for a declarative API and batch updates.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-sand/20">
+                                    <button className="flex items-center gap-2 text-text-secondary hover:text-forest font-semibold text-sm transition-colors px-2 py-2 rounded-lg group">
+                                        <span className="material-symbols-rounded text-[20px] group-hover:scale-110 transition-transform">share</span>
+                                        <span>Share Insight</span>
+                                    </button>
+                                    <button onClick={() => navigate('/')} className="w-full sm:w-auto flex items-center justify-center h-12 px-8 bg-forest hover:bg-forest/90 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-forest/10 active:scale-[0.98]">
+                                        Continue Journey
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-8 text-center text-text-secondary/50 text-xs font-medium font-sans">
+                            Press <kbd className="font-mono bg-white border border-sand/40 px-1.5 py-0.5 rounded text-forest/80 shadow-sm">Esc</kbd> to quit focus mode
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const App = () => {
+            return (
+                <MemoryRouter initialEntries={['/']}>
+                    <Routes>
+                        <Route path="/" element={<LibraryPage />} />
+                        <Route path="/inbox" element={<InboxPage />} />
+                        <Route path="/practice" element={<QuestionPage />} />
+                        <Route path="/feedback" element={<FeedbackPage />} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        };
+
+        const container = document.getElementById('root');
+        const root = createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
