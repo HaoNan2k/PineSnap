@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useMemo, useState, useRef, useEffect } from "react";
+import { Response } from "@/components/chat/components/response";
+
+type LearnPhase = "idle" | "clarifying" | "planning" | "interacting";
+
+type LearnMessage = { role: "user" | "assistant"; content: string };
 
 interface LearnFocusProps {
   resource: {
@@ -12,201 +16,302 @@ interface LearnFocusProps {
   };
 }
 
-type LearnState = "idle" | "generating" | "active";
-
-interface Card {
-  id: string;
-  type: string;
-  title: string;
-  prompt: string;
-}
-
 export function LearnFocus({ resource }: LearnFocusProps) {
-  const [status, setStatus] = useState<LearnState>("idle");
-  const [card, setCard] = useState<Card | null>(null);
+  const [phase, setPhase] = useState<LearnPhase>("idle");
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [planText, setPlanText] = useState("");
+  const [messages, setMessages] = useState<LearnMessage[]>([]);
+  const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (phase === "interacting") {
+      scrollToBottom();
+    }
+  }, [messages, phase]);
+
+  useEffect(() => {
+    handleStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const planEmptyState = useMemo(
+    () =>
+      phase === "idle" || (phase === "clarifying" && planText.length === 0),
+    [phase, planText.length]
+  );
 
   const handleStart = async () => {
-    setStatus("generating");
+    setIsBusy(true);
     setError(null);
-
     try {
-      const res = await fetch("/api/learn/generate", {
+      const res = await fetch("/api/learn/clarify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceId: resource.id }),
+        body: JSON.stringify({
+          resourceId: resource.id,
+        }),
       });
-
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to generate card");
+        throw new Error(data.error || "Failed to generate questions");
       }
-
-      const data = await res.json();
-      if (data.ok && data.card) {
-        setCard(data.card);
-        setStatus("active");
-      } else {
+      const data: { ok: boolean; questions?: string[] } = await res.json();
+      if (!data.ok || !data.questions) {
         throw new Error("Invalid response from server");
       }
+      setQuestions(data.questions);
+      setAnswers(data.questions.map(() => ""));
+      setPhase("clarifying");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
-      setStatus("idle");
+      setPhase("idle");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handlePlan = async () => {
+    if (answers.some((a) => a.trim().length === 0)) {
+      setError("请先回答所有问题");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
+    setPhase("planning");
+    try {
+      const res = await fetch("/api/learn/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceId: resource.id,
+          items: questions.map((q, index) => ({
+            question: q,
+            answer: answers[index],
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to generate plan");
+      }
+      const data: { ok: boolean; planText?: string } = await res.json();
+      if (!data.ok || !data.planText) {
+        throw new Error("Invalid response from server");
+      }
+      setPlanText(data.planText);
+      await generateFirstAssistantMessage(data.planText);
+      setPhase("interacting");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+      setPhase("clarifying");
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const generateFirstAssistantMessage = async (plan: string) => {
+    const res = await fetch("/api/learn/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resourceId: resource.id,
+        planText: plan,
+        init: true,
+        messages: [],
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to start learning");
+    }
+    const data: { ok: boolean; message?: LearnMessage } = await res.json();
+    if (!data.ok || !data.message) {
+      throw new Error("Invalid response from server");
+    }
+    setMessages([data.message]);
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || isBusy) return;
+    const nextMessages = [
+      ...messages,
+      { role: "user" as const, content: input.trim() },
+    ];
+    setMessages(nextMessages);
+    setInput("");
+    setIsBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/learn/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceId: resource.id,
+          planText,
+          messages: nextMessages,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to continue learning");
+      }
+      const data: { ok: boolean; message?: LearnMessage } = await res.json();
+      if (!data.ok || !data.message) {
+        throw new Error("Invalid response from server");
+      }
+      const nextMessage = data.message;
+      setMessages((prev) => [...prev, nextMessage]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsBusy(false);
     }
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full w-full relative bg-background">
-      {/* Exit Button - Top Left */}
-      <div className="fixed top-20 left-6 z-10">
-        <Link
-          href="/sources"
-          className="text-text-secondary/60 hover:text-primary transition-all flex items-center justify-center rounded-xl w-10 h-10 hover:bg-sand/20 border border-transparent hover:border-sand/40 group"
-          title="返回素材"
-        >
-          <span className="material-symbols-rounded text-3xl">close</span>
-        </Link>
-      </div>
-
-      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
-        {status === "idle" && (
-          <IdleState
-            resource={resource}
-            error={error}
-            onStart={handleStart}
-          />
-        )}
-
-        {status === "generating" && <GeneratingState />}
-
-        {status === "active" && card && (
-          <ActiveState card={card} onReset={() => { setStatus("idle"); setCard(null); }} />
-        )}
-
-      </main>
-    </div>
-  );
-}
-
-function IdleState({
-  resource,
-  error,
-  onStart,
-}: {
-  resource: { title: string; type: string };
-  error: string | null;
-  onStart: () => void;
-}) {
-  return (
-    <div className="w-full max-w-[600px] bg-card rounded-2xl shadow-xl border border-gray-100 p-8 sm:p-10 relative overflow-hidden">
-      {/* Context Badge */}
-      <div className="flex flex-col gap-3 mb-8">
-        <div className="flex items-center gap-2 text-primary/80 uppercase tracking-widest text-xs font-bold font-sans">
-          <span className="material-symbols-rounded text-sm">eco</span>
-          <span>LEARNING</span>
-        </div>
-        <div className="relative pl-4 border-l-2 border-sand/50">
-          <p className="font-serif italic text-text-secondary text-lg leading-relaxed">
-           慢慢学习，慢慢积累。
-          </p>
-        </div>
-      </div>
-
-      {/* Title */}
-      <div className="mb-8">
-        <span className="text-[10px] font-bold text-forest-muted uppercase tracking-wider bg-sand/20 px-2 py-1 rounded mb-3 inline-block">
-          {resource.type.replace("_", " ")}
-        </span>
-        <h1 className="font-serif text-2xl font-bold leading-snug text-text-main">
-          {resource.title}
-        </h1>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="mt-10 flex items-center justify-center pt-6 border-t border-gray-100">
-        <button
-          onClick={onStart}
-          className="flex items-center justify-center h-10 px-8 bg-primary text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-primary/20 hover:bg-primary/90 gap-2"
-        >
-          <span className="material-symbols-rounded text-lg">spa</span>
-          开始学习
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function GeneratingState() {
-  return (
-    <div className="flex flex-col items-center gap-6 animate-in fade-in duration-500">
-      <div className="relative">
-        <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse" />
-        <span className="material-symbols-rounded text-5xl animate-spin text-primary relative z-10">
-          progress_activity
-        </span>
-      </div>
-      <p className="text-lg text-forest-muted font-medium animate-pulse">
-        正在生成学习内容...
-      </p>
-    </div>
-  );
-}
-
-function ActiveState({ card, onReset }: { card: Card; onReset: () => void }) {
-  return (
-    <div className="w-full max-w-[600px] bg-card rounded-3xl shadow-xl border border-sand/20 overflow-hidden">
-      {/* Success Header */}
-      <div className="feedback-gradient p-8 sm:p-10 pb-0">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="size-10 rounded-full bg-success/10 text-success flex items-center justify-center">
-            <span className="material-symbols-rounded icon-filled">
-              check_circle
-            </span>
-          </div>
-          <span className="text-success font-bold uppercase tracking-widest text-sm font-sans">
-            {card.title}
+    <div className="flex flex-1 h-full w-full overflow-hidden bg-background">
+      <section className="w-[40%] min-w-[320px] border-r border-sand/30 bg-background px-8 py-8 overflow-y-auto">
+        <div className="flex flex-col gap-3">
+          <span className="text-xs font-semibold tracking-widest text-forest-muted uppercase">
+            Plan
           </span>
+          {planEmptyState ? (
+            <div className="rounded-2xl border border-dashed border-sand/40 p-6 text-sm text-forest-muted">
+              计划尚未生成
+            </div>
+          ) : (
+            <div className="text-sm text-text-main bg-white/70 border border-sand/20 rounded-2xl p-6 overflow-x-auto">
+              <Response>{planText}</Response>
+            </div>
+          )}
         </div>
-        <div className="mb-8">
-          <h1 className="font-serif text-2xl font-bold leading-snug text-text-main">
-            学习挑战
-          </h1>
-        </div>
-      </div>
+      </section>
 
-      {/* Card Content */}
-      <div className="px-8 sm:px-10 pt-2 pb-8">
-        <div className="bg-background/50 rounded-2xl p-6 border border-sand/30 font-sans mb-8">
-          <h3 className="text-primary font-bold text-xs uppercase tracking-wider mb-3">
-            思考引导
-          </h3>
-          <pre className="text-text-secondary leading-relaxed text-base whitespace-pre-wrap font-sans">
-            {card.prompt}
-          </pre>
-        </div>
+      <section className="flex-1 flex flex-col px-10 py-8 gap-6 overflow-hidden">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 shrink-0">
+            {error}
+          </div>
+        )}
 
-        {/* Actions */}
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-sand/20">
-          <button className="flex items-center gap-2 text-text-secondary hover:text-primary font-semibold text-sm transition-colors px-2 py-2 rounded-lg group">
-            <span className="material-symbols-rounded text-xl group-hover:scale-110 transition-transform">
-              share
-            </span>
-            <span>分享</span>
-          </button>
-          <button
-            onClick={onReset}
-            className="w-full sm:w-auto flex items-center justify-center h-12 px-8 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-primary/10 active:scale-[0.98]"
-          >
-            继续学习
-          </button>
-        </div>
-      </div>
+        {phase === "idle" && (
+          <div className="flex flex-col gap-6 max-w-xl">
+            <div>
+              <h1 className="font-serif text-2xl text-text-main font-semibold">
+                {resource.title}
+              </h1>
+            </div>
+            {isBusy ? (
+              <div className="text-forest-muted animate-pulse flex items-center gap-2">
+                正在生成探索性问题...
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStart}
+                className="inline-flex items-center justify-center h-10 px-6 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90"
+              >
+                {error ? "重试" : "开始学习"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {phase === "clarifying" && (
+          <div className="flex flex-col gap-6 max-w-2xl overflow-y-auto pr-2">
+            <div>
+              <h2 className="text-lg font-semibold text-text-main">
+                请回答以下问题
+              </h2>
+            </div>
+            <div className="flex flex-col gap-4">
+              {questions.map((question, index) => (
+                <label
+                  key={question}
+                  className="flex flex-col gap-2 text-sm text-text-main"
+                >
+                  <span>{question}</span>
+                  <textarea
+                    value={answers[index] ?? ""}
+                    onChange={(event) => {
+                      const next = [...answers];
+                      next[index] = event.target.value;
+                      setAnswers(next);
+                    }}
+                    rows={3}
+                    className="rounded-xl border border-sand/30 bg-white px-3 py-2 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={handlePlan}
+              disabled={isBusy}
+              className="inline-flex items-center justify-center h-10 px-6 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60 shrink-0"
+            >
+              生成学习计划
+            </button>
+          </div>
+        )}
+
+        {phase === "planning" && (
+          <div className="text-sm text-forest-muted">正在生成计划...</div>
+        )}
+
+        {phase === "interacting" && (
+          <div className="flex flex-col flex-1 gap-6 overflow-hidden">
+            <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+              {messages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={
+                    message.role === "assistant"
+                      ? "bg-white/80 border border-sand/20 rounded-2xl px-4 py-3 text-sm text-text-main"
+                      : "bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3 text-sm text-text-main"
+                  }
+                >
+                  <Response>{message.content}</Response>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+            <div className="flex items-end gap-3 border-t border-sand/20 pt-4 shrink-0">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.nativeEvent.isComposing) return;
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                disabled={isBusy}
+                rows={2}
+                placeholder="输入你的想法..."
+                className="flex-1 rounded-xl border border-sand/30 bg-white px-3 py-2 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 disabled:bg-sand/10"
+              />
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={isBusy}
+                className="inline-flex items-center justify-center h-10 px-5 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60"
+              >
+                发送
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
