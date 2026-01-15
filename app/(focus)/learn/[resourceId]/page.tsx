@@ -31,7 +31,6 @@ export default async function LearnPage({
 
   if (!result.ok) {
     if (result.status === 404) notFound();
-    // Default to redirecting to inbox if forbidden
     redirect("/sources");
   }
 
