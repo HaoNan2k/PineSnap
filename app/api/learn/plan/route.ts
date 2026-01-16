@@ -57,6 +57,12 @@ export async function POST(req: Request) {
   }
 
   const learning = learningResult.learning;
+  if (!learning) {
+    return Response.json(
+      { error: "Learning not found", code: "LEARNING_NOT_FOUND" },
+      { status: 404 }
+    );
+  }
   const clarifyParsed = clarifyPayloadSchema.safeParse(learning.clarify);
   if (!clarifyParsed.success) {
     return Response.json(

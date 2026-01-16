@@ -8,10 +8,14 @@ export type LearningAccessResult =
   | { ok: true; learning: Awaited<ReturnType<typeof getLearningWithResources>> }
   | { ok: false; status: 403 | 404 };
 
+export type LearningCreateResult =
+  | { ok: true; learning: { id: string } }
+  | { ok: false; status: 403 };
+
 export async function createLearningForResources(args: {
   userId: string;
   resourceIds: string[];
-}) {
+}): Promise<LearningCreateResult> {
   const resources = await prisma.resource.findMany({
     where: { id: { in: args.resourceIds }, userId: args.userId },
     select: { id: true },

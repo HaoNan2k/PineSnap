@@ -13,6 +13,10 @@ import { getLearningWithAccessCheck } from "@/lib/db/learning";
 import { getResourcesContextText } from "@/lib/learn/resource-context";
 import { dbToModelMessages, sdkToChatParts } from "@/lib/chat/converter";
 import { createMessage } from "@/lib/db/message";
+import {
+  isToolResultOutput,
+  type ToolResultOutput,
+} from "@/lib/chat/tool-result-output";
 import { Role } from "@/generated/prisma/client";
 import { getConversation, touchConversation } from "@/lib/db/conversation";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +28,7 @@ export async function POST(req: Request) {
   try {
     const bodyJson: unknown = await req.json();
 
+    const toolResultOutputSchema = z.custom<ToolResultOutput>(isToolResultOutput);
     const chatPartSchema = z.union([
       z.object({ type: z.literal("text"), text: z.string() }),
       z.object({
@@ -43,7 +48,7 @@ export async function POST(req: Request) {
         type: z.literal("tool-result"),
         toolCallId: z.string(),
         toolName: z.string(),
-        output: z.unknown(),
+        output: toolResultOutputSchema,
         isError: z.boolean().optional(),
       }),
     ]);
@@ -82,6 +87,9 @@ export async function POST(req: Request) {
     }
 
     const learning = learningResult.learning;
+    if (!learning) {
+      return Response.json({ error: "Learning not found" }, { status: 404 });
+    }
     const resources = learning.resources.map((item) => item.resource);
 
     const relation = await prisma.learningConversation.findFirst({
