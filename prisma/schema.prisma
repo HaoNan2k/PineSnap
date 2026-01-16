@@ -16,6 +16,7 @@ model Conversation {
   firstClientMessageId String?
   deletedAt            DateTime?
   messages             Message[]
+  learningConnections  LearningConversation[]
 
   @@unique([userId, firstClientMessageId])
   @@index([userId])
@@ -59,13 +60,47 @@ model Resource {
   content    Json
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  learnings  LearningResource[]
 
   @@index([userId])
   @@index([type, externalId])
+}
+
+model Learning {
+  id            String   @id @default(uuid(7))
+  plan          String?  @db.Text
+  clarify       Json?    @db.JsonB
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+  resources     LearningResource[]
+  conversations LearningConversation[]
+}
+
+model LearningResource {
+  learningId String
+  resourceId String
+  createdAt  DateTime @default(now())
+  learning   Learning @relation(fields: [learningId], references: [id])
+  resource   Resource @relation(fields: [resourceId], references: [id])
+
+  @@id([learningId, resourceId])
+}
+
+model LearningConversation {
+  learningId     String
+  conversationId String
+  createdAt      DateTime     @default(now())
+  learning       Learning     @relation(fields: [learningId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@id([learningId, conversationId])
+  @@index([conversationId])
 }
 
 enum Role {
   user
   assistant
   system
+  tool
 }
