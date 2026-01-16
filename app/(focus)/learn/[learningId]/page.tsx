@@ -42,6 +42,9 @@ export default async function LearnPage({
   }
 
   const learning = result.learning;
+  if (!learning) {
+    notFound();
+  }
   const resources = learning.resources.map((item) => item.resource);
   const clarify = parseClarifyPayload(learning.clarify);
 
