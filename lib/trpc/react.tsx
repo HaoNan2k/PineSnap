@@ -1,9 +1,12 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryCache, MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { trpc } from "./client";
+import { LoginCard } from "@/components/auth/login-card";
+import { useAuth } from "@/components/auth/auth-provider";
 
 export { trpc };
 
@@ -20,9 +23,31 @@ function getTrpcErrorCode(error: unknown): string | undefined {
 }
 
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const pathname = usePathname();
+  const { user } = useAuth();
+
+  // Derive whether to show login: unauthorized AND user not logged in
+  // When user logs in, showLoginCard becomes false automatically
+  const showLoginCard = isUnauthorized && !user;
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        queryCache: new QueryCache({
+          onError: (error) => {
+            if (getTrpcErrorCode(error) === "UNAUTHORIZED") {
+              setIsUnauthorized(true);
+            }
+          },
+        }),
+        mutationCache: new MutationCache({
+          onError: (error) => {
+            if (getTrpcErrorCode(error) === "UNAUTHORIZED") {
+              setIsUnauthorized(true);
+            }
+          },
+        }),
         defaultOptions: {
           queries: {
             retry: (failureCount, error) => {
@@ -51,7 +76,19 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        {showLoginCard ? (
+          <div className="flex flex-col items-center justify-center min-h-screen w-full bg-background">
+            <LoginCard
+              supabaseUrl={process.env.NEXT_PUBLIC_SUPABASE_URL!}
+              supabaseAnonKey={process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!}
+              redirectTo={pathname}
+            />
+          </div>
+        ) : (
+          children
+        )}
+      </QueryClientProvider>
     </trpc.Provider>
   );
 }
