@@ -13,7 +13,7 @@ type ResourceList = RouterOutputs["resource"]["list"];
 
 export function SourceList() {
   const router = useRouter();
-  const { data, isLoading } = trpc.resource.list.useQuery();
+  const { data, isLoading, error } = trpc.resource.list.useQuery();
   const resources: ResourceList = data ?? [];
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedCount = selectedIds.length;
@@ -37,15 +37,21 @@ export function SourceList() {
     await createLearning.mutateAsync({ resourceIds });
   };
 
-  if (isLoading) {
+  if (error) {
+    console.error("[SourceList] Failed to load resources:", error);
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="material-symbols-rounded text-4xl animate-spin text-forest-muted">
-          progress_activity
-        </span>
+        <div className="text-center space-y-3">
+          <span className="material-symbols-rounded text-4xl text-forest-muted opacity-30">
+            error
+          </span>
+          <p className="text-sm text-forest-muted">暂时无法加载，请稍后重试</p>
+        </div>
       </div>
     );
   }
+
+  const hasResources = resources.length > 0;
 
   return (
     <div className="flex-1 px-12 py-12 flex flex-col gap-8">
@@ -55,12 +61,14 @@ export function SourceList() {
             素材
           </h2>
           <p className="text-forest-muted font-sans text-sm tracking-wide">
-            {resources?.length
+            {isLoading
+              ? "正在加载素材..."
+              : hasResources
               ? `你有 ${resources.length} 条素材等待处理`
               : "暂无素材，去采集一些内容吧"}
           </p>
         </div>
-        {resources?.length ? (
+        {hasResources && !isLoading ? (
           <div className="flex items-center gap-4">
             <button
               type="button"
@@ -79,7 +87,13 @@ export function SourceList() {
         ) : null}
       </header>
 
-      {!resources?.length ? (
+      {isLoading ? (
+        <div className="flex h-full items-center justify-center">
+          <span className="material-symbols-rounded text-4xl animate-spin text-forest-muted">
+            progress_activity
+          </span>
+        </div>
+      ) : !hasResources ? (
         <div className="flex flex-col items-center justify-center gap-4 py-24 text-forest-muted">
           <span className="material-symbols-rounded text-6xl opacity-30">
             source

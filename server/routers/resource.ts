@@ -10,10 +10,29 @@ export const resourceRouter = router({
   list: protectedProcedure
     .input(z.object({ type: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
+      const start = Date.now();
       const resources = await getUserResources(ctx.user.id);
+      const afterFetch = Date.now();
       if (input?.type) {
-        return resources.filter((r) => r.type === input.type);
+        const filtered = resources.filter((r) => r.type === input.type);
+        const afterFilter = Date.now();
+        console.info("[perf] resource.list", {
+          userId: ctx.user.id,
+          filterType: input.type,
+          fetchMs: afterFetch - start,
+          filterMs: afterFilter - afterFetch,
+          totalMs: afterFilter - start,
+          resultCount: filtered.length,
+        });
+        return filtered;
       }
+      const afterNoFilter = Date.now();
+      console.info("[perf] resource.list", {
+        userId: ctx.user.id,
+        fetchMs: afterFetch - start,
+        totalMs: afterNoFilter - start,
+        resultCount: resources.length,
+      });
       return resources;
     }),
 
