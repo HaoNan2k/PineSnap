@@ -143,7 +143,9 @@ type ClarifyDraftOutput = {
 
 ## API 设计
 
-### `POST /api/learn/clarify`
+> **⚠️ 已废弃（Superseded）**：本提案中的 `POST /api/learn/clarify` 和 `POST /api/learn/plan` 已被 **`optimize-learning-auth-ssr`** 变更中的 tRPC procedures（`learning.generateClarify`、`learning.generatePlan`）取代。实现阶段 MUST 以新变更为准。
+
+### `POST /api/learn/clarify`（已废弃，请使用 `learning.generateClarify` tRPC procedure）
 - **Request**: `{ learningId }`
 - **Response**: `{ ok, questions }`
 - **Behavior**:
@@ -152,7 +154,7 @@ type ClarifyDraftOutput = {
   - 服务端为 questions/options 补齐 id 后再持久化
   - 将 questions 持久化至 `Learning.clarify`
 
-### `POST /api/learn/plan`
+### `POST /api/learn/plan`（已废弃，请使用 `learning.generatePlan` tRPC procedure）
 - **Request**: `{ learningId, answers }`
 - **Response**: `{ ok, plan }`
 - **Behavior**:

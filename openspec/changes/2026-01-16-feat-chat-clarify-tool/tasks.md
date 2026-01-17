@@ -18,8 +18,11 @@
   - 增加多选与 "Create Learning" Action.
 
 ## 3. API 实现 (Backend)
-- [ ] 3.1 `POST /api/learn/clarify`: 通过单次 JSON 输出生成单选/多选问题，并由服务端补齐 id 后持久化到 `Learning.clarify.questions`.
-- [ ] 3.2 `POST /api/learn/plan`: 接收 answers，校验后生成 Plan，写入 `Learning.plan` 与 `Learning.clarify.answers`.
+
+> **⚠️ 已废弃（Superseded）**：以下任务中的 `POST /api/learn/clarify` 和 `POST /api/learn/plan` 已被 **`optimize-learning-auth-ssr`** 变更中的 tRPC procedures 取代。实现阶段 MUST 以新变更为准。
+
+- [ ] 3.1 `POST /api/learn/clarify`: 通过单次 JSON 输出生成单选/多选问题，并由服务端补齐 id 后持久化到 `Learning.clarify.questions`.（已废弃，请使用 `learning.generateClarify` tRPC procedure）
+- [ ] 3.2 `POST /api/learn/plan`: 接收 answers，校验后生成 Plan，写入 `Learning.plan` 与 `Learning.clarify.answers`.（已废弃，请使用 `learning.generatePlan` tRPC procedure）
 - [ ] 3.3 `POST /api/learn/chat`: 仅在 Plan 生成后允许进入正常 Chat（system prompt 注入 plan + resources）。
 
 ## 4. 前端组件

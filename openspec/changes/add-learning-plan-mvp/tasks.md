@@ -16,8 +16,10 @@
 
 ### AI 接口（非流式）
 
-- [ ] 实现 `POST /api/learn/clarify`：输出 3 条澄清问题文本
-- [ ] 实现 `POST /api/learn/plan`：基于答案生成 Plan（Markdown）
+> **⚠️ 已废弃（Superseded）**：以下任务中的 `POST /api/learn/clarify` 和 `POST /api/learn/plan` 已被 **`optimize-learning-auth-ssr`** 变更中的 tRPC procedures 取代。实现阶段 MUST 以新变更为准。
+
+- [ ] 实现 `POST /api/learn/clarify`：输出 3 条澄清问题文本（已废弃，请使用 `learning.generateClarify` tRPC procedure）
+- [ ] 实现 `POST /api/learn/plan`：基于答案生成 Plan（Markdown）（已废弃，请使用 `learning.generatePlan` tRPC procedure）
 - [ ] 实现 `POST /api/learn/chat`：Plan 之后的文本对话
 
 ### UI（右侧交互区）
