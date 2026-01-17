@@ -44,15 +44,23 @@ export async function getUserResources(userId: string) {
       updatedAt: true,
     },
   });
-}type ResourceAccessResult =
+}
+
+type ResourceAccessResult =
   | { ok: false; status: 404 | 403 }
-  | { ok: true; resource: Awaited<ReturnType<typeof prisma.resource.findUnique>> & {} };export async function getResourceWithAccessCheck(
+  | {
+      ok: true;
+      resource: Awaited<ReturnType<typeof prisma.resource.findUnique>> & {};
+    };
+
+export async function getResourceWithAccessCheck(
   id: string,
   userId: string
 ): Promise<ResourceAccessResult> {
   const resource = await prisma.resource.findUnique({
     where: { id },
-  });  if (!resource) {
+  });
+  if (!resource) {
     return { ok: false, status: 404 };
   }
 

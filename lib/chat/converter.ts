@@ -27,16 +27,6 @@ export async function dbToModelMessages(
   for (const m of dbMessages) {
     const chatParts = parseMessageParts(m.parts);
 
-    // Heuristic: If a message contains tool results, treat it as a ToolMessage (role: 'tool')
-    // regardless of the DB role, as Prisma might not support 'tool' role yet.
-    if (chatParts.some((p) => p.type === "tool-result")) {
-      modelMessages.push({
-        role: "tool",
-        content: chatPartsToToolContent(chatParts),
-      });
-      continue;
-    }
-
     // Standard mapping
     if (m.role === "user") {
       modelMessages.push({
@@ -47,6 +37,11 @@ export async function dbToModelMessages(
       modelMessages.push({
         role: "assistant",
         content: chatPartsToAssistantContent(chatParts),
+      });
+    } else if (m.role === "tool") {
+      modelMessages.push({
+        role: "tool",
+        content: chatPartsToToolContent(chatParts),
       });
     } else if (m.role === "system") {
       const isTextPart = (
@@ -249,6 +244,34 @@ export async function convertDbToUIMessages(
     for (const p of chatParts) {
       if (p.type === "text") {
         uiParts.push({ type: "text", text: p.text });
+      } else if (p.type === "tool-call") {
+        uiParts.push({
+          type: "dynamic-tool",
+          toolName: p.toolName,
+          toolCallId: p.toolCallId,
+          state: "input-available",
+          input: p.input,
+        });
+      } else if (p.type === "tool-result") {
+        if (p.isError) {
+          uiParts.push({
+            type: "dynamic-tool",
+            toolName: p.toolName,
+            toolCallId: p.toolCallId,
+            state: "output-error",
+            input: null,
+            errorText: "tool-error",
+          });
+        } else {
+          uiParts.push({
+            type: "dynamic-tool",
+            toolName: p.toolName,
+            toolCallId: p.toolCallId,
+            state: "output-available",
+            input: null,
+            output: p.output,
+          });
+        }
       } else if (p.type === "file") {
         let url = "";
         try {
@@ -294,7 +317,7 @@ export async function convertDbToUIMessages(
 
     uiMessages.push({
       id: m.id,
-      role: m.role as UIMessage["role"],
+      role: (m.role === "tool" ? "assistant" : m.role) as UIMessage["role"],
       parts: uiParts,
       metadata: { createdAt: m.createdAt.toISOString() },
     });

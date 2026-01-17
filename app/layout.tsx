@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter, Merriweather } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "@/lib/trpc/react";
 import { AuthProvider } from "@/components/auth/auth-provider";
@@ -8,9 +9,24 @@ export const metadata: Metadata = {
   title: "PineSnap - Nordic Learning",
   description: "Transform content into active knowledge",
   icons: {
-    icon: "/logo.svg",
+    icon: "/brand-icon.svg",
   },
 };
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "optional",
+  variable: "--font-inter",
+});
+
+const merriweather = Merriweather({
+  subsets: ["latin"],
+  weight: ["300", "400", "700"],
+  style: ["normal", "italic"],
+  display: "optional",
+  variable: "--font-merriweather",
+});
 
 export default function RootLayout({
   children,
@@ -23,20 +39,15 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        {/* Google Fonts - Inter and Merriweather */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap"
-          rel="stylesheet"
-        />
-        {/* Material Symbols */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=optional"
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased">
+      <body
+        className={`${inter.variable} ${merriweather.variable} antialiased`}
+      >
         <TRPCProvider>
           <AuthProvider supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey}>
             {children}

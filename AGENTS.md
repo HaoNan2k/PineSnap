@@ -13,6 +13,87 @@
 - 规范格式与约定
 - 项目结构与指导
 
-请保留此托管区块，以便 `openspec update` 能刷新指令文件。
+请保留此托管区块，以便 \`openspec update\` 能刷新指令文件。
 
 <!-- OPENSPEC:END -->
+
+# 项目知识库
+
+**生成时间:** 2026-01-16 17:01:00 CST
+**提交:** 1b49d00
+**分支:** feat/plan-optimize
+
+## 概述
+
+PineSnap 是一个基于 Next.js 16 的 AI 聊天应用，采用规范驱动开发（OpenSpec）、tRPC 和 Vercel AI SDK。项目以「不止收藏」为核心理念——面向学习者提供 AI + A2UI 辅助交互体验，并使用结构化消息部件（ChatPart）存储对话内容。
+
+## 目录结构
+
+```
+.
+├── app/             # App Router 页面与 API 处理器（chat、learn、capture）
+├── components/      # React 组件（聊天专用、共享 UI、侧边栏）
+├── hooks/           # 自定义 React Hooks
+├── lib/             # 核心逻辑：聊天转换、数据库访问、存储、认证
+├── server/          # tRPC 后端路由与上下文
+├── prisma/          # 数据库模式与迁移
+├── openspec/        # 规范驱动开发文档与变更提案
+├── docs/            # 项目文档（如 Bilibili 连接说明）
+└── public/          # 静态资源
+```
+
+## 快速定位
+
+| 任务 | 位置 | 说明 |
+|------|------|------|
+| 聊天逻辑 | `lib/chat/` | 转换器、类型定义、工具函数 |
+| 数据库访问 | `lib/db/` | Conversation、Message、Resource 等数据访问层 |
+| 流式 API | `app/api/chat/route.ts` | 懒创建会话与流式响应 |
+| UI 组件 | `components/` | 聊天 UI 与共享基础组件 |
+| tRPC 路由 | `server/routers/` | tRPC procedures 定义 |
+| 数据库模式 | `prisma/schema.prisma` | Conversation、Message 等模型定义 |
+| 自定义 Hooks | `hooks/` | `use-mobile`、`use-scroll-to-bottom` 等 |
+| 请求中间件 | `middleware.ts` | Next.js 中间件（鉴权等） |
+| 类型定义 | `lib/chat/types.ts` | ChatPart 等核心类型 |
+
+## 约定（DO / DON'T）
+
+### DO（必须遵守）
+
+- **Prisma 7 导入**：使用自定义输出路径 `../generated/prisma/client`，导入时带 `/client`
+- **OpenSpec 提案**：每个重大变更必须在 `openspec/changes/` 中先提交提案
+- **软删除**：使用 `deletedAt` 时间戳标记删除；禁止物理删除
+- **服务端为真相源**：历史消息拼接必须在服务端完成，客户端只发送 `conversationId` + 当前输入
+- **严格 TypeScript**：所有代码必须类型安全
+
+### DON'T（禁止）
+
+- **禁止 `as any`**：不允许使用类型逃逸
+- **禁止 `@prisma/client`**：只能使用本地生成的客户端（`generated/prisma/client`）
+- **禁止客户端传历史**：不要从客户端向 API 发送完整对话历史
+
+## 独特风格
+
+- **北欧森林主题**：在 `globals.css` 中使用 Tailwind 4 自定义 CSS 变量
+- **懒创建会话**：会话仅在首条消息发送后才由服务端创建
+
+## 环境配置
+
+参考 `env.example` 配置环境变量。主要包括：
+- 数据库连接（PostgreSQL）
+- Supabase 认证与存储
+- AI 模型 API Key
+
+## 常用命令
+
+```bash
+pnpm dev             # 启动开发服务器
+pnpm build           # 构建（会运行 migrate + 生成 prisma）
+pnpm lint            # 运行 eslint
+openspec validate    # 校验 OpenSpec 变更
+```
+
+## 注意事项
+
+- **Beta SDK**：Vercel AI SDK 为 beta 版本；遇到类型/行为疑问时，请查阅 `node_modules` 中的实际类型定义，而非外部文档
+- **签名 URL**：文件通过稳定 ID 引用，但展示时使用短期签名 URL（Supabase Storage）

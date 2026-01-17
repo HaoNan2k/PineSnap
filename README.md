@@ -1,6 +1,16 @@
 # PineSnap
 
-基于 Next.js App Router 的 AI 聊天应用练习仓库，采用 OpenSpec（规格驱动）方式演进，集成 Supabase Auth、Prisma + PostgreSQL、tRPC + React Query，以及文件上传/签名 URL。
+PineSnap 正在从“AI 聊天应用练习仓库”演进为面向学习者的学习产品。当前仍保留部分聊天相关实现，但产品方向与迭代重心以学习体验为主。
+
+## 项目定位
+
+- 目标：打造面向学习者的 AI + A2UI 学习产品
+- 方法：采用 OpenSpec（规格驱动）方式演进，持续沉淀可验证的规范与实现
+- 技术：Next.js App Router、Supabase Auth、Prisma + PostgreSQL、tRPC + React Query、文件上传/签名 URL
+
+## 模块说明
+
+- **Chat 模块**：计划弃用（未来将移除或替换），不作为当前主要能力方向
 
 ## 本地开发
 
@@ -40,7 +50,7 @@ pnpm dev
 
 访问 `http://localhost:3000`。
 
-### 本地数据库（可选）
+### 启动本地数据库（可选）
 
 ```bash
 docker compose up -d

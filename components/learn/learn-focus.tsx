@@ -1,180 +1,138 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { Response } from "@/components/chat/components/response";
-
-type LearnPhase = "idle" | "clarifying" | "planning" | "interacting";
-
-type LearnMessage = { role: "user" | "assistant"; content: string };
+import { ClarifyForm } from "@/components/learn/clarify-form";
+import { PlanCard } from "@/components/learn/plan-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { trpc } from "@/lib/trpc/react";
+import type { ChatPart } from "@/lib/chat/types";
+import type { ClarifyAnswer, ClarifyQuestion } from "@/lib/learn/clarify";
 
 interface LearnFocusProps {
-  resource: {
-    id: string;
-    title: string;
-    type: string;
-    content: unknown;
-  };
+  learningId: string;
 }
 
-export function LearnFocus({ resource }: LearnFocusProps) {
-  const [phase, setPhase] = useState<LearnPhase>("idle");
-  const [questions, setQuestions] = useState<string[]>([]);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const [planText, setPlanText] = useState("");
-  const [messages, setMessages] = useState<LearnMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+function hasContent(m: unknown): m is { content: string } {
+  return (
+    typeof m === "object" &&
+    m !== null &&
+    "content" in m &&
+    typeof (m as { content: unknown }).content === "string"
+  );
+}
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+function LearnFocusSkeleton() {
+  return (
+    <div className="flex flex-1 h-full w-full overflow-hidden bg-background">
+      <section className="w-[40%] min-w-[320px] border-r border-sand/30 bg-background px-8 py-8 overflow-y-auto">
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-12" />
+          <div className="rounded-2xl border border-dashed border-sand/40 p-6">
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </section>
 
-  useEffect(() => {
-    if (phase === "interacting") {
-      scrollToBottom();
-    }
-  }, [messages, phase]);
+      <section className="flex-1 flex flex-col px-10 py-8 gap-6 overflow-hidden">
+        <div className="flex flex-col gap-6 max-w-2xl">
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+          <div className="rounded-2xl border border-dashed border-sand/40 p-6">
+            <Skeleton className="h-32 w-full" />
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    handleStart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const planEmptyState = useMemo(
-    () =>
-      phase === "idle" || (phase === "clarifying" && planText.length === 0),
-    [phase, planText.length]
+export function LearnFocus({ learningId }: LearnFocusProps) {
+  // Fetch initial state via tRPC
+  const stateQuery = trpc.learning.getState.useQuery(
+    { learningId },
+    { retry: false }
   );
 
-  const handleStart = async () => {
-    setIsBusy(true);
+  // Local state for UI updates after mutations (plan and clarify can change during session)
+  const [mutatedPlan, setMutatedPlan] = useState<string | null>(null);
+  const [mutatedClarify, setMutatedClarify] = useState<ClarifyQuestion[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Derive current values: mutation result takes precedence over query data
+  const planText = mutatedPlan ?? stateQuery.data?.learning.plan ?? "";
+  const clarifyQuestions = mutatedClarify ?? stateQuery.data?.learning.clarify?.questions ?? null;
+
+  // Mutations
+  const generateClarifyMutation = trpc.learning.generateClarify.useMutation({
+    onSuccess: (data) => {
+      setMutatedClarify(data.questions);
+    },
+    onError: (err) => {
+      setError(err.message || "生成澄清问题失败");
+    },
+  });
+
+  const generatePlanMutation = trpc.learning.generatePlan.useMutation({
+    onSuccess: (data) => {
+      setMutatedPlan(data.plan);
+    },
+    onError: (err) => {
+      setError(err.message || "生成学习计划失败");
+    },
+  });
+
+  // Auto-trigger clarify generation when needed
+  const clarifyIsPending = generateClarifyMutation.isPending;
+  const clarifyIsSuccess = generateClarifyMutation.isSuccess;
+  const triggerClarify = generateClarifyMutation.mutate;
+
+  useEffect(() => {
+    if (!stateQuery.data) return;
+    if (planText) return; // Already have plan
+    if (clarifyQuestions) return; // Already have questions
+    if (clarifyIsPending || clarifyIsSuccess) return;
+
+    triggerClarify({ learningId });
+  }, [stateQuery.data, planText, clarifyQuestions, learningId, clarifyIsPending, clarifyIsSuccess, triggerClarify]);
+
+  const handleSubmitClarify = (answers: ClarifyAnswer[]) => {
     setError(null);
-    try {
-      const res = await fetch("/api/learn/clarify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resourceId: resource.id,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to generate questions");
-      }
-      const data: { ok: boolean; questions?: string[] } = await res.json();
-      if (!data.ok || !data.questions) {
-        throw new Error("Invalid response from server");
-      }
-      setQuestions(data.questions);
-      setAnswers(data.questions.map(() => ""));
-      setPhase("clarifying");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      setPhase("idle");
-    } finally {
-      setIsBusy(false);
-    }
+    generatePlanMutation.mutate({ learningId, answers });
   };
 
-  const handlePlan = async () => {
-    if (answers.some((a) => a.trim().length === 0)) {
-      setError("请先回答所有问题");
-      return;
-    }
-    setIsBusy(true);
-    setError(null);
-    setPhase("planning");
-    try {
-      const res = await fetch("/api/learn/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resourceId: resource.id,
-          items: questions.map((q, index) => ({
-            question: q,
-            answer: answers[index],
-          })),
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to generate plan");
-      }
-      const data: { ok: boolean; planText?: string } = await res.json();
-      if (!data.ok || !data.planText) {
-        throw new Error("Invalid response from server");
-      }
-      setPlanText(data.planText);
-      await generateFirstAssistantMessage(data.planText);
-      setPhase("interacting");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      setPhase("clarifying");
-    } finally {
-      setIsBusy(false);
-    }
-  };
+  // Loading state
+  if (stateQuery.isLoading) {
+    return <LearnFocusSkeleton />;
+  }
 
-  const generateFirstAssistantMessage = async (plan: string) => {
-    const res = await fetch("/api/learn/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        resourceId: resource.id,
-        planText: plan,
-        init: true,
-        messages: [],
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || "Failed to start learning");
-    }
-    const data: { ok: boolean; message?: LearnMessage } = await res.json();
-    if (!data.ok || !data.message) {
-      throw new Error("Invalid response from server");
-    }
-    setMessages([data.message]);
-  };
+  // Error state (UNAUTHORIZED is handled globally by TRPCProvider)
+  if (stateQuery.error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen w-full bg-background p-4 text-center">
+        <p className="text-forest-muted">{stateQuery.error.message || "加载失败"}</p>
+        <button
+          onClick={() => stateQuery.refetch()}
+          className="mt-4 px-4 py-2 bg-primary text-white rounded-xl text-sm"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
 
-  const handleSend = async () => {
-    if (!input.trim() || isBusy) return;
-    const nextMessages = [
-      ...messages,
-      { role: "user" as const, content: input.trim() },
-    ];
-    setMessages(nextMessages);
-    setInput("");
-    setIsBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/learn/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resourceId: resource.id,
-          planText,
-          messages: nextMessages,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to continue learning");
-      }
-      const data: { ok: boolean; message?: LearnMessage } = await res.json();
-      if (!data.ok || !data.message) {
-        throw new Error("Invalid response from server");
-      }
-      const nextMessage = data.message;
-      setMessages((prev) => [...prev, nextMessage]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsBusy(false);
-    }
-  };
+  if (!stateQuery.data) {
+    return <LearnFocusSkeleton />;
+  }
+
+  const { resources, conversationId, initialMessages } = stateQuery.data;
+  // Type assertion: convertDbToUIMessages returns UIMessage[], but tRPC type inference
+  // can be overly complex. This is safe because the runtime type is correct.
+  const typedInitialMessages = initialMessages as unknown as UIMessage[];
 
   return (
     <div className="flex flex-1 h-full w-full overflow-hidden bg-background">
@@ -183,14 +141,12 @@ export function LearnFocus({ resource }: LearnFocusProps) {
           <span className="text-xs font-semibold tracking-widest text-forest-muted uppercase">
             Plan
           </span>
-          {planEmptyState ? (
+          {planText.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-sand/40 p-6 text-sm text-forest-muted">
               计划尚未生成
             </div>
           ) : (
-            <div className="text-sm text-text-main bg-white/70 border border-sand/20 rounded-2xl p-6 overflow-x-auto">
-              <Response>{planText}</Response>
-            </div>
+            <PlanCard plan={planText} />
           )}
         </div>
       </section>
@@ -202,116 +158,170 @@ export function LearnFocus({ resource }: LearnFocusProps) {
           </div>
         )}
 
-        {phase === "idle" && (
-          <div className="flex flex-col gap-6 max-w-xl">
+        {planText.length === 0 && (
+          <div className="flex flex-col gap-6 max-w-2xl">
             <div>
               <h1 className="font-serif text-2xl text-text-main font-semibold">
-                {resource.title}
+                {resources.map((resource: { title: string }) => resource.title).join(" / ")}
               </h1>
+              <p className="text-sm text-forest-muted mt-2">
+                为你生成学习计划前，请先完成澄清问题。
+              </p>
             </div>
-            {isBusy ? (
-              <div className="text-forest-muted animate-pulse flex items-center gap-2">
-                正在生成探索性问题...
+            {generateClarifyMutation.isPending && (
+              <div className="rounded-2xl border border-dashed border-sand/40 p-6 text-sm text-forest-muted">
+                正在生成澄清问题...
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStart}
-                className="inline-flex items-center justify-center h-10 px-6 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90"
-              >
-                {error ? "重试" : "开始学习"}
-              </button>
+            )}
+            {!generateClarifyMutation.isPending && clarifyQuestions && (
+              <ClarifyForm
+                key={clarifyQuestions.map((q: ClarifyQuestion) => q.id).join("|")}
+                questions={clarifyQuestions}
+                onSubmit={handleSubmitClarify}
+                isSubmitting={generatePlanMutation.isPending}
+              />
             )}
           </div>
         )}
 
-        {phase === "clarifying" && (
-          <div className="flex flex-col gap-6 max-w-2xl overflow-y-auto pr-2">
-            <div>
-              <h2 className="text-lg font-semibold text-text-main">
-                请回答以下问题
-              </h2>
-            </div>
-            <div className="flex flex-col gap-4">
-              {questions.map((question, index) => (
-                <label
-                  key={question}
-                  className="flex flex-col gap-2 text-sm text-text-main"
-                >
-                  <span>{question}</span>
-                  <textarea
-                    value={answers[index] ?? ""}
-                    onChange={(event) => {
-                      const next = [...answers];
-                      next[index] = event.target.value;
-                      setAnswers(next);
-                    }}
-                    rows={3}
-                    className="rounded-xl border border-sand/30 bg-white px-3 py-2 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </label>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={handlePlan}
-              disabled={isBusy}
-              className="inline-flex items-center justify-center h-10 px-6 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60 shrink-0"
-            >
-              生成学习计划
-            </button>
-          </div>
-        )}
-
-        {phase === "planning" && (
-          <div className="text-sm text-forest-muted">正在生成计划...</div>
-        )}
-
-        {phase === "interacting" && (
-          <div className="flex flex-col flex-1 gap-6 overflow-hidden">
-            <div className="flex-1 space-y-4 overflow-y-auto pr-2">
-              {messages.map((message, index) => (
-                <div
-                  key={`${message.role}-${index}`}
-                  className={
-                    message.role === "assistant"
-                      ? "bg-white/80 border border-sand/20 rounded-2xl px-4 py-3 text-sm text-text-main"
-                      : "bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3 text-sm text-text-main"
-                  }
-                >
-                  <Response>{message.content}</Response>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-            <div className="flex items-end gap-3 border-t border-sand/20 pt-4 shrink-0">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    if (e.nativeEvent.isComposing) return;
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                disabled={isBusy}
-                rows={2}
-                placeholder="输入你的想法..."
-                className="flex-1 rounded-xl border border-sand/30 bg-white px-3 py-2 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 disabled:bg-sand/10"
-              />
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={isBusy}
-                className="inline-flex items-center justify-center h-10 px-5 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60"
-              >
-                发送
-              </button>
-            </div>
-          </div>
+        {planText.length > 0 && (
+          <ChatPanel
+            learningId={learningId}
+            conversationId={conversationId}
+            initialMessages={typedInitialMessages}
+          />
         )}
       </section>
+    </div>
+  );
+}
+
+function ChatPanel({
+  learningId,
+  conversationId,
+  initialMessages,
+}: {
+  learningId: string;
+  conversationId: string;
+  initialMessages: UIMessage[];
+}) {
+  const [input, setInput] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/learn/chat",
+        prepareSendMessagesRequest: ({ messages: currentMessages }) => {
+          const last = currentMessages[currentMessages.length - 1];
+          const clientMessageId = last.id;
+          const inputParts: ChatPart[] = [];
+
+          if (last.parts && last.parts.length > 0) {
+            for (const p of last.parts) {
+              if (p.type === "text") {
+                inputParts.push({ type: "text", text: p.text });
+              }
+            }
+          } else if (hasContent(last)) {
+            inputParts.push({ type: "text", text: last.content });
+          }
+
+          return {
+            body: {
+              learningId,
+              conversationId,
+              clientMessageId,
+              input: inputParts,
+            },
+          };
+        },
+      }),
+    [conversationId, learningId]
+  );
+
+  const { messages, sendMessage, status } = useChat({
+    id: conversationId,
+    messages: initialMessages,
+    transport,
+  });
+
+  const isBusy = status !== "ready";
+
+  const displayMessages = useMemo(() => {
+    return messages
+      .map((message) => {
+        let content = "";
+        if (message.parts && message.parts.length > 0) {
+          const textParts = message.parts.filter(
+            (p): p is Extract<typeof p, { type: "text" }> => p.type === "text"
+          );
+          content = textParts.map((p) => p.text).join("\n");
+        } else if (hasContent(message)) {
+          content = message.content;
+        }
+        return {
+          id: message.id,
+          role: message.role as "user" | "assistant",
+          content,
+        };
+      })
+      .filter((message) => message.content.trim().length > 0);
+  }, [messages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [displayMessages.length]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isBusy) return;
+    const content = input.trim();
+    setInput("");
+    await sendMessage({ role: "user", parts: [{ type: "text", text: content }] });
+  };
+
+  return (
+    <div className="flex flex-col flex-1 gap-6 overflow-hidden">
+      <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+        {displayMessages.map((message) => (
+          <div
+            key={message.id}
+            className={
+              message.role === "assistant"
+                ? "bg-white/80 border border-sand/20 rounded-2xl px-4 py-3 text-sm text-text-main"
+                : "bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3 text-sm text-text-main"
+            }
+          >
+            <Response>{message.content}</Response>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+      <div className="flex items-end gap-3 border-t border-sand/20 pt-4 shrink-0">
+        <textarea
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              if (e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          disabled={isBusy}
+          rows={2}
+          placeholder="输入你的想法..."
+          className="flex-1 rounded-xl border border-sand/30 bg-white px-3 py-2 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-60 disabled:bg-sand/10"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={isBusy}
+          className="inline-flex items-center justify-center h-10 px-5 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60"
+        >
+          发送
+        </button>
+      </div>
     </div>
   );
 }

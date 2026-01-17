@@ -75,9 +75,9 @@
   --color-text-secondary: var(--text-secondary);
   
   /* Fonts */
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Merriweather", ui-serif, Georgia, serif;
-  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-merriweather), ui-serif, Georgia, serif;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -143,9 +143,9 @@
   background: rgba(44, 78, 55, 0.2);
 }
 
-/* Material Symbols - loaded via Google Fonts link in layout */
+/* Material Symbols */
 .material-symbols-rounded {
-  font-family: 'Material Symbols Rounded';
+  font-family: "Material Symbols Rounded", sans-serif;
   font-weight: normal;
   font-style: normal;
   font-size: 24px;
