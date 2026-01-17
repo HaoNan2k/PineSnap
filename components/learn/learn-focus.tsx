@@ -6,25 +6,13 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { Response } from "@/components/chat/components/response";
 import { ClarifyForm } from "@/components/learn/clarify-form";
 import { PlanCard } from "@/components/learn/plan-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { trpc } from "@/lib/trpc/react";
 import type { ChatPart } from "@/lib/chat/types";
-import { z } from "zod";
-import {
-  clarifyQuestionSchema,
-  type ClarifyAnswer,
-  type ClarifyPayload,
-  type ClarifyQuestion,
-} from "@/lib/learn/clarify";
+import type { ClarifyAnswer, ClarifyQuestion } from "@/lib/learn/clarify";
 
 interface LearnFocusProps {
-  learning: { id: string; plan: string | null; clarify: ClarifyPayload | null };
-  resources: Array<{
-    id: string;
-    title: string;
-    type: string;
-    content: unknown;
-  }>;
-  conversationId: string;
-  initialMessages: UIMessage[];
+  learningId: string;
 }
 
 function hasContent(m: unknown): m is { content: string } {
@@ -36,109 +24,115 @@ function hasContent(m: unknown): m is { content: string } {
   );
 }
 
-const clarifyResponseSchema = z.object({
-  ok: z.boolean(),
-  questions: z.array(clarifyQuestionSchema),
-});
+function LearnFocusSkeleton() {
+  return (
+    <div className="flex flex-1 h-full w-full overflow-hidden bg-background">
+      <section className="w-[40%] min-w-[320px] border-r border-sand/30 bg-background px-8 py-8 overflow-y-auto">
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-12" />
+          <div className="rounded-2xl border border-dashed border-sand/40 p-6">
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </section>
 
-const clarifyErrorSchema = z.object({
-  error: z.string(),
-  code: z.string().optional(),
-});
+      <section className="flex-1 flex flex-col px-10 py-8 gap-6 overflow-hidden">
+        <div className="flex flex-col gap-6 max-w-2xl">
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+          <div className="rounded-2xl border border-dashed border-sand/40 p-6">
+            <Skeleton className="h-32 w-full" />
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
 
-const planResponseSchema = z.object({
-  ok: z.boolean(),
-  plan: z.string(),
-});
+export function LearnFocus({ learningId }: LearnFocusProps) {
+  // Fetch initial state via tRPC
+  const stateQuery = trpc.learning.getState.useQuery(
+    { learningId },
+    { retry: false }
+  );
 
-const planErrorSchema = z.object({
-  error: z.string(),
-  code: z.string().optional(),
-});
-
-export function LearnFocus({
-  learning,
-  resources,
-  conversationId,
-  initialMessages,
-}: LearnFocusProps) {
+  // Local state for UI updates after mutations (plan and clarify can change during session)
+  const [mutatedPlan, setMutatedPlan] = useState<string | null>(null);
+  const [mutatedClarify, setMutatedClarify] = useState<ClarifyQuestion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clarifyQuestions, setClarifyQuestions] = useState<
-    ClarifyQuestion[] | null
-  >(learning.clarify?.questions ?? null);
-  const [planText, setPlanText] = useState(learning.plan ?? "");
-  const [isClarifyLoading, setIsClarifyLoading] = useState(false);
-  const [isPlanLoading, setIsPlanLoading] = useState(false);
-  const clarifyRequestedRef = useRef(false);
+
+  // Derive current values: mutation result takes precedence over query data
+  const planText = mutatedPlan ?? stateQuery.data?.learning.plan ?? "";
+  const clarifyQuestions = mutatedClarify ?? stateQuery.data?.learning.clarify?.questions ?? null;
+
+  // Mutations
+  const generateClarifyMutation = trpc.learning.generateClarify.useMutation({
+    onSuccess: (data) => {
+      setMutatedClarify(data.questions);
+    },
+    onError: (err) => {
+      setError(err.message || "生成澄清问题失败");
+    },
+  });
+
+  const generatePlanMutation = trpc.learning.generatePlan.useMutation({
+    onSuccess: (data) => {
+      setMutatedPlan(data.plan);
+    },
+    onError: (err) => {
+      setError(err.message || "生成学习计划失败");
+    },
+  });
+
+  // Auto-trigger clarify generation when needed
+  const clarifyIsPending = generateClarifyMutation.isPending;
+  const clarifyIsSuccess = generateClarifyMutation.isSuccess;
+  const triggerClarify = generateClarifyMutation.mutate;
 
   useEffect(() => {
-    if (planText || clarifyQuestions || clarifyRequestedRef.current) return;
-    let active = true;
+    if (!stateQuery.data) return;
+    if (planText) return; // Already have plan
+    if (clarifyQuestions) return; // Already have questions
+    if (clarifyIsPending || clarifyIsSuccess) return;
 
-    const fetchClarify = async () => {
-      clarifyRequestedRef.current = true;
-      setIsClarifyLoading(true);
-      try {
-        const response = await fetch("/api/learn/clarify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ learningId: learning.id }),
-        });
-        const data: unknown = await response.json();
-        const parsed = clarifyResponseSchema.safeParse(data);
-        if (!parsed.success || !parsed.data.ok) {
-          const errorParsed = clarifyErrorSchema.safeParse(data);
-          const message = errorParsed.success
-            ? errorParsed.data.error
-            : "生成澄清问题失败，请稍后重试";
-          throw new Error(message);
-        }
-        if (active) {
-          setClarifyQuestions(parsed.data.questions);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : "生成澄清问题失败，请稍后重试");
-        }
-      } finally {
-        if (active) {
-          setIsClarifyLoading(false);
-        }
-      }
-    };
+    triggerClarify({ learningId });
+  }, [stateQuery.data, planText, clarifyQuestions, learningId, clarifyIsPending, clarifyIsSuccess, triggerClarify]);
 
-    void fetchClarify();
-
-    return () => {
-      active = false;
-    };
-  }, [clarifyQuestions, learning.id, planText]);
-
-  const handleSubmitClarify = async (answers: ClarifyAnswer[]) => {
+  const handleSubmitClarify = (answers: ClarifyAnswer[]) => {
     setError(null);
-    setIsPlanLoading(true);
-    try {
-      const response = await fetch("/api/learn/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ learningId: learning.id, answers }),
-      });
-      const data: unknown = await response.json();
-      const parsed = planResponseSchema.safeParse(data);
-      if (!parsed.success || !parsed.data.ok) {
-        const errorParsed = planErrorSchema.safeParse(data);
-        const message = errorParsed.success
-          ? errorParsed.data.error
-          : "生成学习计划失败，请稍后重试";
-        throw new Error(message);
-      }
-      setPlanText(parsed.data.plan);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "生成学习计划失败，请稍后重试");
-    } finally {
-      setIsPlanLoading(false);
-    }
+    generatePlanMutation.mutate({ learningId, answers });
   };
+
+  // Loading state
+  if (stateQuery.isLoading) {
+    return <LearnFocusSkeleton />;
+  }
+
+  // Error state (UNAUTHORIZED is handled globally by TRPCProvider)
+  if (stateQuery.error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen w-full bg-background p-4 text-center">
+        <p className="text-forest-muted">{stateQuery.error.message || "加载失败"}</p>
+        <button
+          onClick={() => stateQuery.refetch()}
+          className="mt-4 px-4 py-2 bg-primary text-white rounded-xl text-sm"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  if (!stateQuery.data) {
+    return <LearnFocusSkeleton />;
+  }
+
+  const { resources, conversationId, initialMessages } = stateQuery.data;
+  // Type assertion: convertDbToUIMessages returns UIMessage[], but tRPC type inference
+  // can be overly complex. This is safe because the runtime type is correct.
+  const typedInitialMessages = initialMessages as unknown as UIMessage[];
 
   return (
     <div className="flex flex-1 h-full w-full overflow-hidden bg-background">
@@ -168,23 +162,23 @@ export function LearnFocus({
           <div className="flex flex-col gap-6 max-w-2xl">
             <div>
               <h1 className="font-serif text-2xl text-text-main font-semibold">
-                {resources.map((resource) => resource.title).join(" / ")}
+                {resources.map((resource: { title: string }) => resource.title).join(" / ")}
               </h1>
               <p className="text-sm text-forest-muted mt-2">
                 为你生成学习计划前，请先完成澄清问题。
               </p>
             </div>
-            {isClarifyLoading && (
+            {generateClarifyMutation.isPending && (
               <div className="rounded-2xl border border-dashed border-sand/40 p-6 text-sm text-forest-muted">
                 正在生成澄清问题...
               </div>
             )}
-            {!isClarifyLoading && clarifyQuestions && (
+            {!generateClarifyMutation.isPending && clarifyQuestions && (
               <ClarifyForm
-                key={clarifyQuestions.map((question) => question.id).join("|")}
+                key={clarifyQuestions.map((q: ClarifyQuestion) => q.id).join("|")}
                 questions={clarifyQuestions}
                 onSubmit={handleSubmitClarify}
-                isSubmitting={isPlanLoading}
+                isSubmitting={generatePlanMutation.isPending}
               />
             )}
           </div>
@@ -192,9 +186,9 @@ export function LearnFocus({
 
         {planText.length > 0 && (
           <ChatPanel
-            learningId={learning.id}
+            learningId={learningId}
             conversationId={conversationId}
-            initialMessages={initialMessages}
+            initialMessages={typedInitialMessages}
           />
         )}
       </section>

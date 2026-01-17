@@ -73,24 +73,64 @@ export async function getLearningWithAccessCheck(
   id: string,
   userId: string
 ): Promise<LearningAccessResult> {
-  const learning = await getLearningWithResources(id);
+  const start = Date.now();
+  
+  // Single query to get learning and its resources (for access check)
+  const learning = await prisma.learning.findUnique({
+    where: { id },
+    include: {
+      resources: {
+        include: {
+          resource: {
+            select: {
+              id: true,
+              userId: true,
+              title: true,
+              type: true,
+              content: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+      },
+      conversations: {
+        include: {
+          conversation: {
+            select: { id: true, userId: true, deletedAt: true },
+          },
+        },
+      },
+    },
+  });
+
+  const afterFetch = Date.now();
+  
   if (!learning || learning.deletedAt) {
     return { ok: false, status: 404 };
   }
 
-  const totalResources = await prisma.learningResource.count({
-    where: { learningId: id },
-  });
+  const totalResources = learning.resources.length;
   if (totalResources === 0) {
     return { ok: false, status: 404 };
   }
 
-  const ownedResources = await prisma.learningResource.count({
-    where: { learningId: id, resource: { userId } },
-  });
-  if (ownedResources !== totalResources) {
+  // Check if all resources belong to the user
+  const ownedResourcesCount = learning.resources.filter(
+    (lr) => lr.resource.userId === userId
+  ).length;
+
+  if (ownedResourcesCount !== totalResources) {
     return { ok: false, status: 403 };
   }
+
+  console.info("[perf] learning.accessCheck (optimized)", {
+    learningId: id,
+    userId,
+    fetchMs: afterFetch - start,
+    totalMs: Date.now() - start,
+    totalResources,
+  });
 
   return { ok: true, learning };
 }
@@ -99,6 +139,7 @@ export async function ensureLearningConversation(
   learningId: string,
   userId: string
 ) {
+  const start = Date.now();
   const existing = await prisma.learningConversation.findFirst({
     where: {
       learningId,
@@ -106,14 +147,32 @@ export async function ensureLearningConversation(
     },
     include: { conversation: true },
   });
+  const afterFind = Date.now();
 
   if (existing?.conversation) {
+    console.info("[perf] learning.ensureConversation", {
+      learningId,
+      userId,
+      findMs: afterFind - start,
+      totalMs: afterFind - start,
+      created: false,
+    });
     return existing.conversation;
   }
 
   const conversation = await createConversation(userId);
   await prisma.learningConversation.create({
     data: { learningId, conversationId: conversation.id },
+  });
+  const afterCreate = Date.now();
+
+  console.info("[perf] learning.ensureConversation", {
+    learningId,
+    userId,
+    findMs: afterFind - start,
+    createMs: afterCreate - afterFind,
+    totalMs: afterCreate - start,
+    created: true,
   });
 
   return conversation;

@@ -8,7 +8,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
-import { getAuthenticatedUserId } from "@/lib/supabase/auth";
+import { getAuthenticatedUserIdFromRequest } from "@/lib/supabase/auth";
 import { getLearningWithAccessCheck } from "@/lib/db/learning";
 import { getResourcesContextText } from "@/lib/learn/resource-context";
 import { dbToModelMessages, sdkToChatParts } from "@/lib/chat/converter";
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const userId = await getAuthenticatedUserId();
+    const userId = await getAuthenticatedUserIdFromRequest(req);
     if (!userId) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
