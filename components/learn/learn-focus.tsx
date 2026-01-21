@@ -2,7 +2,11 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithToolCalls,
+  type UIMessage,
+} from "ai";
 import { Response } from "@/components/chat/components/response";
 import { ClarifyForm } from "@/components/learn/clarify-form";
 import { PlanCard } from "@/components/learn/plan-card";
@@ -10,6 +14,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc/react";
 import type { ChatPart } from "@/lib/chat/types";
 import type { ClarifyAnswer, ClarifyQuestion } from "@/lib/learn/clarify";
+import { A2UIRenderer } from "@/components/chat/a2ui/renderer";
+import {
+  getLastStepFingerprint,
+  getToolInvocationsFromLastStep,
+  hasTurnOutput,
+} from "@/lib/chat/utils";
+import { toToolResultOutput } from "@/lib/chat/tool-result-output";
 
 interface LearnFocusProps {
   learningId: string;
@@ -205,8 +216,12 @@ function ChatPanel({
   conversationId: string;
   initialMessages: UIMessage[];
 }) {
+  type LearnUIMessage = UIMessage;
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const inflightMessageIdRef = useRef<string | null>(null);
+  const [timeoutFiredForId, setTimeoutFiredForId] = useState<string | null>(null);
 
   const transport = useMemo(
     () =>
@@ -214,10 +229,30 @@ function ChatPanel({
         api: "/api/learn/chat",
         prepareSendMessagesRequest: ({ messages: currentMessages }) => {
           const last = currentMessages[currentMessages.length - 1];
-          const clientMessageId = last.id;
+          let clientMessageId = last.id;
           const inputParts: ChatPart[] = [];
 
-          if (last.parts && last.parts.length > 0) {
+          // v6 client-side tools:
+          // When the last message is an assistant tool prompt, we submit tool results (not text)
+          // back to the server to continue the reasoning loop.
+          const toolInvocations = getToolInvocationsFromLastStep(last.parts);
+          const completedToolOutputs = toolInvocations.filter(
+            (t) => t.isReadOnly && t.result !== undefined
+          );
+
+          if (last.role === "assistant" && completedToolOutputs.length > 0) {
+            clientMessageId = `tool:${completedToolOutputs
+              .map((t) => t.toolCallId)
+              .join(",")}:${last.id}`;
+            for (const t of completedToolOutputs) {
+              inputParts.push({
+                type: "tool-result",
+                toolCallId: t.toolCallId,
+                toolName: t.toolName,
+                output: toToolResultOutput(t.result),
+              });
+            }
+          } else if (last.parts && last.parts.length > 0) {
             for (const p of last.parts) {
               if (p.type === "text") {
                 inputParts.push({ type: "text", text: p.text });
@@ -240,13 +275,87 @@ function ChatPanel({
     [conversationId, learningId]
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, addToolResult } =
+    useChat<LearnUIMessage>({
     id: conversationId,
-    messages: initialMessages,
-    transport,
-  });
+      messages: initialMessages as LearnUIMessage[],
+      transport,
+      // AI SDK v6 standard: auto-resubmit when tool calls are complete.
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    });
 
   const isBusy = status !== "ready";
+  const lastMessage = messages[messages.length - 1];
+  const prevAssistant = useMemo(() => {
+    for (let i = messages.length - 2; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "assistant") return message;
+    }
+    return null;
+  }, [messages]);
+  const baselineFingerprint = useMemo(() => {
+    return prevAssistant ? getLastStepFingerprint(prevAssistant.parts) : "";
+  }, [prevAssistant]);
+  const currentFingerprint = useMemo(() => {
+    return lastMessage ? getLastStepFingerprint(lastMessage.parts) : "";
+  }, [lastMessage]);
+  const lastAssistantHasOutput = useMemo(() => {
+    if (!lastMessage || lastMessage.role !== "assistant") return false;
+    if (prevAssistant) {
+      return (
+        currentFingerprint.length > 0 &&
+        currentFingerprint !== baselineFingerprint
+      );
+    }
+    return hasTurnOutput(lastMessage.parts);
+  }, [lastMessage, prevAssistant, currentFingerprint, baselineFingerprint]);
+
+  useEffect(() => {
+    const shouldTrack =
+      !!lastMessage &&
+      lastMessage.role === "assistant" &&
+      status !== "ready" &&
+      !lastAssistantHasOutput;
+
+    if (!shouldTrack) {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      inflightMessageIdRef.current = null;
+      return;
+    }
+
+    if (inflightMessageIdRef.current === lastMessage.id) return;
+
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+    }
+
+    inflightMessageIdRef.current = lastMessage.id;
+    timeoutRef.current = window.setTimeout(() => {
+      setTimeoutFiredForId(lastMessage.id);
+    }, 20000);
+
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [status, lastAssistantHasOutput, lastMessage]);
+
+  const shouldGateLatestAssistant =
+    !!lastMessage &&
+    lastMessage.role === "assistant" &&
+    status !== "ready" &&
+    !lastAssistantHasOutput;
+  const inflightTimedOut = timeoutFiredForId === lastMessage?.id;
+  const shouldShowError =
+    !!lastMessage &&
+    lastMessage.role === "assistant" &&
+    !lastAssistantHasOutput &&
+    (status === "error" || inflightTimedOut);
 
   const displayMessages = useMemo(() => {
     return messages
@@ -260,13 +369,43 @@ function ChatPanel({
         } else if (hasContent(message)) {
           content = message.content;
         }
+
+        const a2uiInvocations = getToolInvocationsFromLastStep(message.parts);
+        const isLatestAssistant =
+          message.id === lastMessage?.id && message.role === "assistant";
+        const isGated = isLatestAssistant && shouldGateLatestAssistant && !shouldShowError;
+        const isError = isLatestAssistant && shouldShowError;
+
         return {
           id: message.id,
           role: message.role as "user" | "assistant",
           content,
+          parts: message.parts,
+          a2uiInvocations,
+          isGated,
+          isError,
         };
       })
-      .filter((message) => message.content.trim().length > 0);
+      .filter(
+        (message) =>
+          message.content.trim().length > 0 ||
+          (message.a2uiInvocations && message.a2uiInvocations.length > 0) ||
+          message.isGated ||
+          message.isError
+      );
+  }, [messages, lastMessage?.id, shouldGateLatestAssistant, shouldShowError]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    console.debug("[LearnChat] last message", {
+      id: last.id,
+      role: last.role,
+      content: hasContent(last) ? last.content : "",
+        derivedToolInvocations: getToolInvocationsFromLastStep(last.parts),
+      parts: last.parts ?? [],
+    });
   }, [messages]);
 
   useEffect(() => {
@@ -292,7 +431,23 @@ function ChatPanel({
                 : "bg-primary/10 border border-primary/20 rounded-2xl px-4 py-3 text-sm text-text-main"
             }
           >
-            <Response>{message.content}</Response>
+            {message.isGated ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+            ) : message.isError ? (
+              <Response>生成失败，请稍后重试。</Response>
+            ) : (
+              <>
+                <Response>{message.content}</Response>
+                {message.role === "assistant" && (
+                  <div className="mt-4">
+                    <A2UIRenderer parts={message.parts} addToolResult={addToolResult} />
+                  </div>
+                )}
+              </>
+            )}
           </div>
         ))}
         <div ref={messagesEndRef} />
