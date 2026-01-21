@@ -108,7 +108,7 @@ export function ChatArea({
     [conversationId]
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, addToolResult } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
@@ -224,6 +224,7 @@ export function ChatArea({
           content: content,
           parts: parts, // Pass structured parts
           attachments,
+          uiParts: m.parts,
           createdAt: createdAt,
         };
       }),
@@ -313,6 +314,7 @@ export function ChatArea({
         <MessageList
           messages={mappedMessages}
           isAssistantTyping={isAssistantTyping}
+          addToolResult={addToolResult}
         />
       )}
 
