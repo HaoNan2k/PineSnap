@@ -18,8 +18,7 @@ export async function GET(req: Request) {
   const userId = await getAuthenticatedUserId();
   if (!userId) {
     const url = new URL(req.url);
-    url.pathname = "/chat";
-    url.searchParams.set("unauthorized", "true");
+    url.pathname = "/login";
     url.searchParams.set("returnUrl", "/connect/bilibili");
     return Response.redirect(url);
   }
