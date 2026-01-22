@@ -192,7 +192,7 @@ export function LoginCard({
                   <>
                     <div className="flex gap-2 sm:gap-3">
                       {slots.slice(0, 6).map((slot, idx) => (
-                        <Slot key={idx} {...slot} />
+                        <Slot key={idx} {...slot} hasError={status === "error"} />
                       ))}
                     </div>
                   </>
@@ -239,7 +239,7 @@ export function LoginCard({
 }
 
 // 独立的 OTP Slot 组件 - 调整尺寸以匹配 h-14 输入框风格
-function Slot(props: SlotProps) {
+function Slot(props: SlotProps & { hasError?: boolean }) {
   return (
     <div
       className={cn(
