@@ -38,6 +38,9 @@ export async function middleware(request: NextRequest) {
 
   const protectedPaths = [
     "/chat/c/",
+    "/sources",
+    "/learn",
+    "/connect/bilibili",
     "/api/trpc/",
     "/api/learn/",
     // "/api/trpc/message", // Add this when message router is ready
@@ -69,8 +72,7 @@ export async function middleware(request: NextRequest) {
       );
     }
     const url = request.nextUrl.clone();
-    url.pathname = "/chat";
-    url.searchParams.set("unauthorized", "true");
+    url.pathname = "/login";
     url.searchParams.set("returnUrl", request.nextUrl.pathname);
     return applyCookies(NextResponse.redirect(url));
   }
@@ -87,6 +89,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/chat/c/:path*",
+    "/sources/:path*",
+    "/learn/:path*",
+    "/connect/bilibili/:path*",
     "/api/trpc/:path*",
     "/api/learn/:path*",
   ],
