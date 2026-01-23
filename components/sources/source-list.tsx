@@ -1,6 +1,6 @@
 "use client";
 
-import { trpc } from "@/lib/trpc/react";
+import { trpc, getTrpcErrorCode } from "@/lib/trpc/react";
 import type { AppRouter } from "@/server";
 import type { inferRouterOutputs } from "@trpc/server";
 import { useMemo, useState } from "react";
@@ -38,6 +38,9 @@ export function SourceList() {
   };
 
   if (error) {
+    if (getTrpcErrorCode(error) === "UNAUTHORIZED") {
+      return null;
+    }
     console.error("[SourceList] Failed to load resources:", error);
     return (
       <div className="flex h-full items-center justify-center">

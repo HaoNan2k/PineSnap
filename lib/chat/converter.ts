@@ -12,6 +12,8 @@ import { parseMessageParts } from "./utils";
 import { fileStorage } from "@/lib/storage";
 import { fileContentResolver } from "@/lib/files/content-resolver";
 import { toToolResultOutput } from "./tool-result-output";
+import { isToolResultOutput } from "./tool-result-output";
+import { isRecord } from "@/lib/utils";
 
 // --- DB -> Model (Context Construction) ---
 
@@ -159,9 +161,13 @@ function chatPartsToToolContent(parts: ChatPart[]): ToolContent {
  * Converts AI SDK StepResult content to ChatPart[] for persistence.
  */
 export function sdkToChatParts(
-  content: Array<ContentPart<ToolSet>>
+  content: string | Array<ContentPart<ToolSet>>
 ): ChatPart[] {
   const parts: ChatPart[] = [];
+
+  if (typeof content === "string") {
+    return [{ type: "text", text: content }];
+  }
 
   for (const p of content) {
     if (p.type === "text") {
@@ -241,35 +247,122 @@ export async function convertDbToUIMessages(
     const chatParts = parseMessageParts(m.parts);
     const uiParts: UIMessage["parts"] = [];
 
+    // Tool messages are persisted separately in DB (Role.tool), but in UI we want
+    // tool results to be rendered as part of the originating assistant message,
+    // not as an extra duplicated "assistant" bubble.
+    if (m.role === "tool") {
+      for (const p of chatParts) {
+        if (p.type !== "tool-result") continue;
+
+        const outputValue: unknown = (() => {
+          const out = p.output;
+          if (isToolResultOutput(out)) {
+            if (out.type === "json" || out.type === "error-json") return out.value;
+            if (out.type === "text" || out.type === "error-text") return out.value;
+          }
+          return out;
+        })();
+
+        // Find the most recent assistant UI message that has the matching tool call.
+        let merged = false;
+        for (let i = uiMessages.length - 1; i >= 0; i--) {
+          const candidate = uiMessages[i];
+          if (candidate.role !== "assistant") continue;
+
+          const parts = candidate.parts;
+          for (let j = 0; j < parts.length; j++) {
+            const part = parts[j];
+            if (!isRecord(part)) continue;
+            const rec = part as Record<string, unknown>;
+            if (rec["type"] !== `tool-${p.toolName}`) continue;
+            if (rec["toolCallId"] !== p.toolCallId) continue;
+
+            // Patch the tool part in place: keep input, attach output / error.
+            parts[j] = {
+              ...rec,
+              state: p.isError ? "output-error" : "output-available",
+              ...(p.isError
+                ? { errorText: "tool-error" }
+                : { output: outputValue }),
+            } as unknown as (typeof parts)[number];
+            merged = true;
+            break;
+          }
+          if (merged) break;
+        }
+
+        // Fallback: if no matching tool call exists in UI history, render it as its own part.
+        if (!merged) {
+          if (p.isError) {
+            uiParts.push({
+              type: `tool-${p.toolName}` as `tool-${string}`,
+              toolCallId: p.toolCallId,
+              state: "output-error",
+              // UI tool parts require an `input` field; when missing, fall back to empty object.
+              input: {},
+              errorText: "tool-error",
+            });
+          } else {
+            uiParts.push({
+              type: `tool-${p.toolName}` as `tool-${string}`,
+              toolCallId: p.toolCallId,
+              state: "output-available",
+              input: {},
+              output: outputValue,
+            });
+          }
+        }
+      }
+
+      if (uiParts.length > 0) {
+        uiMessages.push({
+          id: m.id,
+          role: "assistant",
+          parts: uiParts,
+          metadata: { createdAt: m.createdAt.toISOString() },
+        });
+      }
+
+      continue;
+    }
+
     for (const p of chatParts) {
       if (p.type === "text") {
         uiParts.push({ type: "text", text: p.text });
       } else if (p.type === "tool-call") {
         uiParts.push({
-          type: "dynamic-tool",
-          toolName: p.toolName,
+          type: `tool-${p.toolName}` as `tool-${string}`,
           toolCallId: p.toolCallId,
           state: "input-available",
           input: p.input,
         });
       } else if (p.type === "tool-result") {
+        // For UI rendering, prefer raw output values (e.g. {selection:"A"}) over the wrapped ToolResultOutput.
+        // DB persists ToolResultOutput for provider-agnostic storage; UI expects tool-specific output shape.
+        const outputValue: unknown = (() => {
+          const out = p.output;
+          if (isToolResultOutput(out)) {
+            if (out.type === "json" || out.type === "error-json") return out.value;
+            if (out.type === "text" || out.type === "error-text") return out.value;
+          }
+          // Fallback: keep as-is
+          return out;
+        })();
         if (p.isError) {
           uiParts.push({
-            type: "dynamic-tool",
-            toolName: p.toolName,
+            type: `tool-${p.toolName}` as `tool-${string}`,
             toolCallId: p.toolCallId,
             state: "output-error",
-            input: null,
+            input: {},
             errorText: "tool-error",
           });
         } else {
           uiParts.push({
-            type: "dynamic-tool",
-            toolName: p.toolName,
+            type: `tool-${p.toolName}` as `tool-${string}`,
             toolCallId: p.toolCallId,
             state: "output-available",
-            input: null,
-            output: p.output,
+            input: {},
+            output: outputValue,
           });
         }
       } else if (p.type === "file") {
@@ -317,7 +410,7 @@ export async function convertDbToUIMessages(
 
     uiMessages.push({
       id: m.id,
-      role: (m.role === "tool" ? "assistant" : m.role) as UIMessage["role"],
+      role: m.role as UIMessage["role"],
       parts: uiParts,
       metadata: { createdAt: m.createdAt.toISOString() },
     });

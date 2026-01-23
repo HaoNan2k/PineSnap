@@ -11,7 +11,7 @@ import {
   type LearningAccessResult,
 } from "@/lib/db/learning";
 import { getConversation } from "@/lib/db/conversation";
-import { convertDbToUIMessages } from "@/lib/chat/converter";
+import { convertLearnDbToUIMessages } from "@/lib/learn/a2ui/merge";
 import { getResourcesContextText } from "@/lib/learn/resource-context";
 import {
   getClarifySystemPrompt,
@@ -114,7 +114,7 @@ export const learningRouter = router({
         ctx.user.id
       );
       const initialMessages = conversationWithMessages
-        ? await convertDbToUIMessages(conversationWithMessages.messages)
+        ? await convertLearnDbToUIMessages(conversationWithMessages.messages)
         : [];
 
       return {
@@ -156,7 +156,7 @@ export const learningRouter = router({
       ];
 
       const result = await generateText({
-        model: "google/gemini-3-flash",
+        model: "openai/gpt-5.2",
         messages,
         output: Output.object({ schema: clarifyDraftSchema }),
         maxRetries: 2,
@@ -273,7 +273,7 @@ export const learningRouter = router({
         .join("\n\n");
 
       const { text } = await generateText({
-        model: "google/gemini-3-flash",
+        model: "openai/gpt-5.2",
         system:
           "你是学习计划制定助手。请输出 Markdown 文本形式的学习计划，简洁可执行。",
         prompt: `学习素材上下文：\n${contextText}\n\n澄清问答：\n${qaBlock}\n\n请生成学习计划（Markdown）。`,

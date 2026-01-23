@@ -13,17 +13,19 @@ alwaysApply: true
 - **包管理器**: pnpm
 - **Next.js**: 16.0.8（App Router）
 - **React**: 19.2.1
-- **Vercel AI SDK（beta）**
-  - `ai`: 6.0.0-beta.141
-  - `@ai-sdk/react`: 3.0.0-beta.143
+- **Vercel AI SDK v6（beta）** ⚠️ **核心依赖**
+  - `ai`: 6.0.0-beta.169
+  - `@ai-sdk/react`: 3.0.0-beta.172
+  - **重要**：本项目使用 **AI SDK v6 beta**，API 与稳定版可能有差异
 - **Prisma**: 7.1.0（`prisma` + `@prisma/client`）
 - **数据库**: PostgreSQL（存储结构化消息内容使用 `jsonb`）
 - **语言**: TypeScript
 
-## Vercel AI SDK（beta）使用原则
+## Vercel AI SDK v6（beta）使用原则 ⚠️
 
-- **以本地安装版本为真相源**：当文档/示例与当前行为不一致时，优先阅读本仓库的 `node_modules/ai`、`node_modules/@ai-sdk/react` 的类型定义与实现，以及 `pnpm-lock.yaml`。
-- **避免假设稳定 API**：beta 版本可能存在 breaking changes；任何涉及 `useChat`、流式响应、data stream 的用法必须先对照当前版本的类型/行为。
+- **以本地安装版本为真相源**：当文档/示例与当前行为不一致时，**必须**优先阅读本仓库的 `node_modules/ai`、`node_modules/@ai-sdk/react` 的类型定义与实现，以及 `pnpm-lock.yaml`。**不要依赖外部文档或示例**，因为 v6 beta 的 API 可能已变更。
+- **避免假设稳定 API**：beta 版本可能存在 breaking changes；任何涉及 `useChat`、流式响应、data stream、工具调用（tools）的用法必须先对照当前版本的类型/行为。
+- **调试工具**：遇到 AI SDK 相关问题时，使用 `/dev/trace` 页面（仅开发环境）追踪请求/响应，查看完整的消息上下文、工具调用等调试信息。
 - **边界清晰**：
   - `useChat` 负责 UI 层消息状态与流式展示。
   - 服务端（Route Handlers）负责权限校验、历史拼接、落库与会话生命周期的真相源。
@@ -42,4 +44,5 @@ alwaysApply: true
 
 - Next App Router Route Handlers 位于 `app/api/**/route.ts`。
 - Prisma client 通过项目内封装使用（例如 `lib/prisma.ts`），避免在业务代码中散落初始化逻辑。
+- 开发调试工具位于 `app/dev/trace/`，用于追踪 AI 请求/响应上下文。
 

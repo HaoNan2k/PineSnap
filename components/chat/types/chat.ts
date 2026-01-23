@@ -1,4 +1,5 @@
 import { ChatPart } from "@/lib/chat/types";
+import type { UIMessage } from "ai";
 
 export interface MessageAttachment {
   name: string;
@@ -30,5 +31,10 @@ export interface Message {
   content: string;
   parts?: ChatPart[];
   attachments?: MessageAttachment[];
+  /**
+   * UIMessage parts from AI SDK, used for tool rendering.
+   * Keep this separate from persisted ChatPart[] to avoid mixing concerns.
+   */
+  uiParts?: UIMessage["parts"];
   createdAt: Date;
 }

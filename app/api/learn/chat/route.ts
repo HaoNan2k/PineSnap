@@ -3,7 +3,9 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   UI_MESSAGE_STREAM_HEADERS,
+  stepCountIs,
   type ContentPart,
+  type ModelMessage,
   type ToolSet,
 } from "ai";
 import { z } from "zod";
@@ -21,10 +23,31 @@ import { Role } from "@/generated/prisma/client";
 import { getConversation, touchConversation } from "@/lib/db/conversation";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
+import { a2uiTools } from "@/lib/chat/tools";
+import { getContextSystemPrompt } from "@/lib/chat/context-manager";
+import {
+  recordLearnTraceError,
+  recordLearnTraceFinish,
+  recordLearnTraceStart,
+} from "@/lib/dev/trace-store";
 
 export const maxDuration = 30;
 
+function toTraceMessages(messages: ModelMessage[]) {
+  return messages.map((m) => ({ role: m.role, content: m.content }));
+}
+
+function errorToString(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}\n${error.stack ?? ""}`.trim();
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 export async function POST(req: Request) {
+  let traceRoundId: string | null = null;
   try {
     const bodyJson: unknown = await req.json();
 
@@ -111,7 +134,12 @@ export async function POST(req: Request) {
       return Response.json({ error: "Learning plan required" }, { status: 400 });
     }
 
-    await createMessage(conversationId, Role.user, input, clientMessageId);
+    // 2. Persist User/Tool Message
+    // If input contains tool-result, it must be Role.tool for the model to understand context.
+    const hasToolResult = input.some((p) => p.type === "tool-result");
+    const messageRole = hasToolResult ? Role.tool : Role.user;
+
+    await createMessage(conversationId, messageRole, input, clientMessageId);
     await touchConversation(conversationId, userId);
 
     const conversation = await getConversation(conversationId, userId);
@@ -127,25 +155,43 @@ export async function POST(req: Request) {
       }))
     );
 
-    const systemPrompt = [
-      "你是学习教练与答疑助手，帮助用户围绕学习计划推进学习。",
-      "",
-      "素材上下文：",
-      contextText,
-      "",
-      "学习计划（Markdown）：",
-      learning.plan,
-    ].join("\n");
+    const systemPrompt = await getContextSystemPrompt(userId, {
+      learningPlan: learning.plan,
+      resourcesContext: contextText,
+    });
 
     const modelMessages = await dbToModelMessages(conversation.messages);
 
+    const requestMessages: ModelMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...modelMessages,
+    ];
+
+    traceRoundId = recordLearnTraceStart({
+      learningId,
+      conversationId,
+      clientMessageId,
+      inputParts: input,
+      requestMessages: toTraceMessages(requestMessages),
+    });
+
     const result = streamText({
-      model: "google/gemini-2.0-flash",
-      messages: [{ role: "system", content: systemPrompt }, ...modelMessages],
+      model: "openai/gpt-5.2",
+      messages: requestMessages,
+      tools: a2uiTools,
+      stopWhen: stepCountIs(5),
+      onError: (error) => {
+        recordLearnTraceError(traceRoundId, errorToString(error));
+        logError("streamText /api/learn/chat failed", error);
+      },
       onFinish: ({ response }) => {
         waitUntil(
           (async () => {
             try {
+              recordLearnTraceFinish(
+                traceRoundId,
+                response.messages.map((m) => ({ role: m.role, content: m.content }))
+              );
               for (const message of response.messages) {
                 const parts = sdkToChatParts(
                   message.content as Array<ContentPart<ToolSet>>
@@ -169,7 +215,11 @@ export async function POST(req: Request) {
         writer.write({ type: "start" });
         writer.merge(result.toUIMessageStream({ sendStart: false }));
       },
-      onError: () => "An error occurred.",
+      onError: (error) => {
+        recordLearnTraceError(traceRoundId, errorToString(error));
+        logError("UI message stream /api/learn/chat failed", error);
+        return "An error occurred.";
+      },
     });
 
     return createUIMessageStreamResponse({
@@ -177,6 +227,7 @@ export async function POST(req: Request) {
       headers: UI_MESSAGE_STREAM_HEADERS,
     });
   } catch (err) {
+    recordLearnTraceError(traceRoundId, String(err));
     logError("POST /api/learn/chat failed", err);
     return Response.json({ error: String(err) }, { status: 500 });
   }

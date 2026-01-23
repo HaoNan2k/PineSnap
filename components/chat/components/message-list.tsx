@@ -9,10 +9,17 @@ import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
 import { cn } from "@/lib/utils";
 import { MessageActions } from "./message-actions";
 import { PreviewAttachment } from "./preview-attachment";
+import { A2UIRenderer, type A2UIAddToolResult } from "@/components/chat/a2ui/renderer";
 
 const messageTextClassName = "text-[15px] leading-relaxed";
 
-function MessageItem({ message }: { message: Message }) {
+function MessageItem({
+  message,
+  addToolResult,
+}: {
+  message: Message;
+  addToolResult?: (payload: A2UIAddToolResult) => void;
+}) {
   const isUser = message.role === "user";
 
   // 1. Separate parts
@@ -85,6 +92,9 @@ function MessageItem({ message }: { message: Message }) {
             <Response>{textContent}</Response>
           </div>
 
+          {/* A2UI Renderer */}
+          <A2UIRenderer parts={message.uiParts} addToolResult={addToolResult} />
+
           {/* Attachments for assistant (rare but possible) */}
           {attachments.length > 0 && (
             <div className="flex flex-wrap justify-start gap-2 mt-2">
@@ -115,9 +125,11 @@ function MessageItem({ message }: { message: Message }) {
 export const MessageList = ({
   messages,
   isAssistantTyping,
+  addToolResult,
 }: {
   messages: Message[];
   isAssistantTyping: boolean;
+  addToolResult?: (payload: A2UIAddToolResult) => void;
 }) => {
   const { containerRef, endRef, isAtBottom, scrollToBottom } =
     useScrollToBottom();
@@ -130,7 +142,11 @@ export const MessageList = ({
       >
         <div className="mx-auto flex min-w-0 max-w-3xl flex-col gap-8 px-4 py-8 md:px-6">
           {messages.map((message) => (
-            <MessageItem key={message.id} message={message} />
+            <MessageItem
+              key={message.id}
+              message={message}
+              addToolResult={addToolResult}
+            />
           ))}
 
           {isAssistantTyping &&

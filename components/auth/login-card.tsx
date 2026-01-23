@@ -1,10 +1,13 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Mail } from "lucide-react";
+import { OTPInput, SlotProps } from "input-otp";
+import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 export function LoginCard({
   supabaseUrl,
@@ -27,6 +30,15 @@ export function LoginCard({
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // 倒计时逻辑
+  const [countdown, setCountdown] = useState(0);
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
   const onSendOtp = async () => {
     setStatus("loading");
     setErrorMessage(null);
@@ -34,7 +46,6 @@ export function LoginCard({
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        // 不传递 emailRedirectTo，Supabase 将发送纯数字 OTP
         shouldCreateUser: true,
       },
     });
@@ -47,35 +58,35 @@ export function LoginCard({
 
     setStatus("idle");
     setStep("verify");
-    toast.success("验证码已发送，请检查邮箱");
+    setCountdown(60); // 60秒倒计时
+    toast.success("验证码已发送");
   };
 
-  const onVerifyOtp = async () => {
+  const onVerifyOtp = async (token: string) => {
     setStatus("loading");
     setErrorMessage(null);
 
     const { error } = await supabase.auth.verifyOtp({
       email,
-      token: otp,
+      token,
       type: "email",
     });
 
     if (error) {
       setStatus("error");
       setErrorMessage(error.message);
+      setOtp(""); // 清空以便重试
       return;
     }
 
     toast.success("登录成功");
     
-    // 登录成功后跳转
     if (redirectTo) {
       router.push(redirectTo);
     } else {
       router.push("/chat");
     }
     
-    // 刷新页面以确保 Auth Context 更新（虽然 onAuthStateChange 会处理，但路由跳转更稳）
     router.refresh();
   };
 
@@ -85,129 +96,167 @@ export function LoginCard({
     setErrorMessage(null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
-    if (e.key === "Enter") {
+  const handleEmailKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && email.trim()) {
       e.preventDefault();
-      action();
+      onSendOtp();
     }
   };
 
   return (
-    <div className="mx-auto w-full max-w-md p-6">
-      <div className="rounded-xl border bg-card p-8 shadow-sm">
-        {step === "email" ? (
-          // 步骤 1: 输入邮箱
-          <div className="space-y-6">
-            <div className="space-y-2 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <Mail className="h-6 w-6 text-primary" />
-              </div>
-              <h1 className="text-2xl font-semibold tracking-tight">欢迎回来</h1>
-              <p className="text-sm text-muted-foreground">
-                输入邮箱以接收 6 位登录验证码
-              </p>
-            </div>
+    <div className="w-full max-w-[400px]">
+      {/* 移动端 Logo (仅在 lg 以下显示) */}
+      <div className="lg:hidden flex items-center gap-2 mb-8 justify-center opacity-90">
+        <div className="relative h-8 w-8">
+          <Image 
+            src="/brand-icon.svg" 
+            alt="PineSnap Logo" 
+            fill
+            className="object-contain"
+          />
+        </div>
+        <span className="font-serif text-xl font-medium text-foreground tracking-tight">PineSnap</span>
+      </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e, onSendOtp)}
-                  autoComplete="email"
-                  inputMode="email"
-                  autoFocus
-                />
-              </div>
-
-              {status === "error" && (
-                <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-                  {errorMessage}
-                </div>
-              )}
-
-              <button
-                className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                onClick={onSendOtp}
-                disabled={status === "loading" || !email.trim()}
-              >
-                {status === "loading" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                发送验证码
-              </button>
-            </div>
+      {step === "email" ? (
+        <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="text-left space-y-1">
+            <h1 className="text-3xl font-serif font-medium tracking-tight text-foreground">欢迎回来</h1>
+            {/* 移除副标题 */}
           </div>
-        ) : (
-          // 步骤 2: 输入验证码
+
           <div className="space-y-6">
-            <div className="space-y-2 text-center">
-              <button
-                onClick={handleBack}
-                className="absolute left-8 top-8 flex items-center text-sm text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeft className="mr-1 h-4 w-4" />
-                返回
-              </button>
-              <h1 className="text-2xl font-semibold tracking-tight">输入验证码</h1>
-              <p className="text-sm text-muted-foreground">
-                已发送 6 位验证码至 <span className="font-medium text-foreground">{email}</span>
-              </p>
+            <div className="group relative">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/40 group-focus-within:text-primary/60 transition-colors">
+                <Mail className="h-5 w-5" />
+              </div>
+              <input
+                className="w-full h-14 rounded-xl border border-gray-200 bg-white pl-12 pr-4 text-lg shadow-sm placeholder:text-muted-foreground/40 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={handleEmailKeyDown}
+                autoComplete="email"
+                inputMode="email"
+                autoFocus
+              />
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <input
-                  className="w-full rounded-md border bg-background px-3 py-2 text-center text-2xl font-semibold tracking-widest ring-offset-background placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="000000"
-                  value={otp}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 6);
-                    setOtp(val);
-                    if (val.length === 6) {
-                      // 自动触发验证（体验更好，但需要小心 status 状态，这里还是让用户点或者回车更稳）
-                    }
-                  }}
-                  onKeyDown={(e) => handleKeyDown(e, onVerifyOtp)}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  autoFocus
-                />
+            {status === "error" && (
+              <div className="text-sm text-destructive text-center font-medium bg-destructive/5 py-3 rounded-xl">
+                {errorMessage}
               </div>
+            )}
 
-              {status === "error" && (
-                <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-                  验证失败：{errorMessage}
+            <button
+              className="w-full h-14 rounded-xl bg-primary text-white text-lg font-medium shadow-sm hover:bg-primary/90 hover:shadow-md transition-all active:scale-[0.99] disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center gap-2"
+              onClick={onSendOtp}
+              disabled={status === "loading" || !email.trim()}
+            >
+              {status === "loading" && <Loader2 className="h-5 w-5 animate-spin" />}
+              继续
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 relative pt-2">
+           {/* 返回按钮 */}
+          <button
+            onClick={handleBack}
+            className="absolute -top-12 -left-2 p-2 text-muted-foreground/40 hover:text-foreground transition-colors rounded-full hover:bg-black/5"
+            aria-label="返回"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
+          <div className="text-left space-y-2">
+            <h1 className="text-2xl font-serif font-medium tracking-tight text-foreground">查收验证码</h1>
+            <p className="text-base text-muted-foreground">
+              已发送至 <span className="font-medium text-foreground">{email}</span>
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center space-y-8">
+            <div className="relative w-full flex justify-center">
+              <OTPInput
+                maxLength={6}
+                value={otp}
+                onChange={(val) => {
+                  setOtp(val);
+                  if (val.length === 6) {
+                    onVerifyOtp(val);
+                  }
+                }}
+                containerClassName="group flex items-center gap-3 has-[:disabled]:opacity-30"
+                render={({ slots }) => (
+                  <>
+                    <div className="flex gap-2 sm:gap-3">
+                      {slots.slice(0, 6).map((slot, idx) => (
+                        <Slot key={idx} {...slot} hasError={status === "error"} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              />
+              
+              {status === "loading" && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-xl z-10">
+                  <Loader2 className="h-8 w-8 text-primary animate-spin" />
                 </div>
               )}
+            </div>
 
+            {status === "error" && (
+              <div className="text-sm text-destructive font-medium animate-shake bg-destructive/5 px-4 py-2 rounded-lg">
+                {errorMessage || "验证失败，请重试"}
+              </div>
+            )}
+
+            <div className="text-center w-full">
               <button
-                className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                onClick={onVerifyOtp}
-                disabled={status === "loading" || otp.length !== 6}
+                onClick={() => {
+                  if (countdown === 0) {
+                    onSendOtp();
+                  }
+                }}
+                disabled={countdown > 0 || status === "loading"}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 disabled:hover:text-muted-foreground"
               >
-                {status === "loading" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {countdown > 0 ? (
+                  <span>重新发送 ({countdown}s)</span>
                 ) : (
-                  "验证登录"
+                  <span className="underline underline-offset-4 decoration-muted-foreground/30 hover:decoration-primary">
+                    没有收到？重新发送
+                  </span>
                 )}
               </button>
-
-              <div className="text-center">
-                <button
-                  onClick={onSendOtp}
-                  className="text-xs text-muted-foreground hover:text-primary hover:underline"
-                  disabled={status === "loading"}
-                >
-                  没收到？重新发送
-                </button>
-              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 独立的 OTP Slot 组件 - 调整尺寸以匹配 h-14 输入框风格
+function Slot(props: SlotProps & { hasError?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "relative w-12 h-16 text-2xl font-medium flex items-center justify-center",
+        "transition-all duration-200",
+        "border border-gray-200 bg-white rounded-xl shadow-sm", // 加大圆角
+        "text-foreground",
+        props.isActive && "border-primary ring-4 ring-primary/10 z-10 scale-105", 
+        props.hasError && "border-destructive ring-destructive/20 text-destructive"
+      )}
+    >
+      {props.char !== null && <div>{props.char}</div>}
+      {props.hasFakeCaret && (
+        <div className="absolute pointer-events-none inset-0 flex items-center justify-center">
+          <div className="w-[2px] h-8 bg-primary animate-caret-blink" />
+        </div>
+      )}
     </div>
   );
 }
