@@ -78,91 +78,98 @@ export function ClarifyForm({
   };
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl overflow-y-auto pr-2">
-      <div>
+    <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="shrink-0">
         <h2 className="text-lg font-semibold text-text-main">
           请回答以下问题
         </h2>
       </div>
+
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 shrink-0">
           {error}
         </div>
       )}
-      <div className="flex flex-col gap-6">
-        {questions.map((question, index) => (
-          <fieldset
-            key={question.id}
-            className="flex flex-col gap-3 text-sm text-text-main"
-          >
-            <legend className="font-medium">
-              {index + 1}. {question.prompt}
-            </legend>
-            <div className="flex flex-col gap-2">
-              {question.options.map((option) => {
-                const answer = answers[question.id];
-                const checked =
-                  answer?.type === "single_choice"
-                    ? answer.optionId === option.id
-                    : answer?.type === "multi_choice"
-                    ? answer.optionIds.includes(option.id)
-                    : false;
-                return (
-                  <label
-                    key={option.id}
-                    className="flex items-center gap-2 rounded-xl border border-sand/30 bg-white px-3 py-2"
-                  >
-                    <input
-                      type={question.type === "single_choice" ? "radio" : "checkbox"}
-                      name={question.id}
-                      checked={checked}
-                      onChange={() => {
-                        setAnswers((prev) => {
-                          const current = prev[question.id];
-                          if (!current || current.type !== question.type) return prev;
-                          if (question.type === "single_choice") {
+
+      <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+        <div className="flex flex-col gap-6 pb-4">
+          {questions.map((question, index) => (
+            <fieldset
+              key={question.id}
+              className="flex flex-col gap-3 text-sm text-text-main"
+            >
+              <legend className="font-medium">
+                {index + 1}. {question.prompt}
+              </legend>
+              <div className="flex flex-col gap-2">
+                {question.options.map((option) => {
+                  const answer = answers[question.id];
+                  const checked =
+                    answer?.type === "single_choice"
+                      ? answer.optionId === option.id
+                      : answer?.type === "multi_choice"
+                      ? answer.optionIds.includes(option.id)
+                      : false;
+                  return (
+                    <label
+                      key={option.id}
+                      className="flex items-center gap-2 rounded-xl border border-sand/30 bg-white px-3 py-2 cursor-pointer hover:bg-sand/5 transition-colors"
+                    >
+                      <input
+                        type={question.type === "single_choice" ? "radio" : "checkbox"}
+                        name={question.id}
+                        checked={checked}
+                        onChange={() => {
+                          setAnswers((prev) => {
+                            const current = prev[question.id];
+                            if (!current || current.type !== question.type) return prev;
+                            if (question.type === "single_choice") {
+                              return {
+                                ...prev,
+                                [question.id]: {
+                                  type: "single_choice",
+                                  optionId: option.id,
+                                },
+                              };
+                            }
+                            if (current.type !== "multi_choice") {
+                              return prev;
+                            }
+                            const exists = current.optionIds.includes(option.id);
+                            const optionIds = exists
+                              ? current.optionIds.filter((id: string) => id !== option.id)
+                              : [...current.optionIds, option.id];
                             return {
                               ...prev,
                               [question.id]: {
-                                type: "single_choice",
-                                optionId: option.id,
+                                type: "multi_choice",
+                                optionIds,
                               },
                             };
-                          }
-                          if (current.type !== "multi_choice") {
-                            return prev;
-                          }
-                          const exists = current.optionIds.includes(option.id);
-                          const optionIds = exists
-                            ? current.optionIds.filter((id: string) => id !== option.id)
-                            : [...current.optionIds, option.id];
-                          return {
-                            ...prev,
-                            [question.id]: {
-                              type: "multi_choice",
-                              optionIds,
-                            },
-                          };
-                        });
-                      }}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    <span>{option.text}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-        ))}
+                          });
+                        }}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      <span>{option.text}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ))}
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={isSubmitting}
-        className="inline-flex items-center justify-center h-10 px-6 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60 shrink-0"
-      >
-        生成学习计划
-      </button>
+
+      <div className="shrink-0 pt-2">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+          className="inline-flex items-center justify-center h-10 px-6 bg-primary text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-60 shrink-0"
+        >
+          生成学习计划
+        </button>
+      </div>
     </div>
   );
 }
