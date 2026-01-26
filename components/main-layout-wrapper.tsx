@@ -5,11 +5,12 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { UserMenu } from "@/components/user/user-menu";
+import { BookOpenText, GraduationCap, Inbox } from "lucide-react";
 
 const navItems = [
-  { href: "/sources", label: "素材", icon: "inbox" },
-  { href: "/learning", label: "学习", icon: "school" },
-  { href: "/notes", label: "知识", icon: "auto_stories" },
+  { href: "/sources", label: "素材", Icon: Inbox },
+  { href: "/learning", label: "学习", Icon: GraduationCap },
+  { href: "/notes", label: "知识", Icon: BookOpenText },
 ];
 
 export function MainLayoutWrapper({ children }: { children: React.ReactNode }) {
@@ -53,6 +54,7 @@ function MainSidebar() {
         <nav className="flex flex-col gap-2">
           {navItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
+            const Icon = item.Icon;
             return (
               <Link
                 key={item.href}
@@ -64,14 +66,7 @@ function MainSidebar() {
                     : "text-forest-muted hover:bg-sand/10"
                 )}
               >
-                <span
-                  className={cn(
-                    "material-symbols-rounded text-2xl",
-                    isActive && "icon-filled"
-                  )}
-                >
-                  {item.icon}
-                </span>
+                <Icon className="h-6 w-6" aria-hidden />
                 <span
                   className={cn("text-sm", isActive ? "font-bold" : "font-medium")}
                 >

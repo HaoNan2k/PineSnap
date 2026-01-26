@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Search,
+} from "lucide-react";
 
 const libraryCards = [
   {
@@ -89,9 +96,7 @@ export default function NotesPage() {
         <div className="flex items-center gap-4">
           {/* Search Bar */}
           <div className="relative min-w-[320px]">
-            <span className="material-symbols-rounded absolute left-4 top-1/2 -translate-y-1/2 text-forest-muted text-xl">
-              search
-            </span>
+            <Search className="h-5 w-5 absolute left-4 top-1/2 -translate-y-1/2 text-forest-muted" aria-hidden />
             <input
               className="w-full bg-sand/10 dark:bg-white/5 border-none focus:ring-1 focus:ring-primary rounded-xl pl-12 pr-4 py-3 text-sm placeholder:text-forest-muted/60 placeholder:font-medium"
               placeholder="搜索知识..."
@@ -102,7 +107,7 @@ export default function NotesPage() {
             className="bg-primary text-white size-12 rounded-xl flex items-center justify-center hover:opacity-90 transition-opacity"
             aria-label="添加新内容"
           >
-            <span className="material-symbols-rounded">add</span>
+            <Plus className="h-5 w-5" aria-hidden />
           </button>
         </div>
       </header>
@@ -119,7 +124,7 @@ export default function NotesPage() {
             }`}
           >
             {idx === 0 && (
-              <span className="material-symbols-rounded text-lg">done</span>
+              <Check className="h-4 w-4" aria-hidden />
             )}
             {label}
           </button>
@@ -141,7 +146,7 @@ export default function NotesPage() {
               <div className="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors" />
               {card.progress === 100 && (
                 <div className="absolute top-4 right-4 bg-primary text-white size-8 rounded-full flex items-center justify-center">
-                  <span className="material-symbols-rounded text-sm">check</span>
+                  <Check className="h-4 w-4" aria-hidden />
                 </div>
               )}
             </div>
@@ -178,9 +183,7 @@ export default function NotesPage() {
         </p>
         <div className="flex gap-2">
           <button className="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center transition-colors">
-            <span className="material-symbols-rounded text-primary">
-              chevron_left
-            </span>
+            <ChevronLeft className="h-5 w-5 text-primary" aria-hidden />
           </button>
           <button className="bg-primary text-white size-10 rounded-lg flex items-center justify-center font-bold text-sm">
             1
@@ -192,9 +195,7 @@ export default function NotesPage() {
             3
           </button>
           <button className="bg-sand/10 hover:bg-sand/20 size-10 rounded-lg flex items-center justify-center transition-colors">
-            <span className="material-symbols-rounded text-primary">
-              chevron_right
-            </span>
+            <ChevronRight className="h-5 w-5 text-primary" aria-hidden />
           </button>
         </div>
       </footer>

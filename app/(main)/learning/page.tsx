@@ -1,3 +1,5 @@
+import { GraduationCap } from "lucide-react";
+
 export default function LearningPage() {
   return (
     <div className="flex-1 px-12 py-12 flex flex-col gap-8">
@@ -14,9 +16,7 @@ export default function LearningPage() {
       </header>
 
       <div className="flex flex-col items-center justify-center gap-4 py-24 text-forest-muted">
-        <span className="material-symbols-rounded text-6xl opacity-30">
-          school
-        </span>
+        <GraduationCap className="h-16 w-16 opacity-30" aria-hidden />
         <p className="text-lg">学习功能开发中</p>
         <p className="text-sm">这里将展示你的学习任务与进度</p>
       </div>

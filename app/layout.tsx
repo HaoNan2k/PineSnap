@@ -38,13 +38,6 @@ export default function RootLayout({
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=optional"
-          rel="stylesheet"
-        />
-      </head>
       <body
         className={`${inter.variable} ${merriweather.variable} antialiased`}
       >
