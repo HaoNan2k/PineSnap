@@ -4,6 +4,7 @@ import "./globals.css";
 import { TRPCProvider } from "@/lib/trpc/react";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Toaster } from "sonner";
+import { requireEnv } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: "PineSnap - Nordic Learning",
@@ -33,8 +34,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const supabaseAnonKey = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
