@@ -170,7 +170,7 @@ export function LearnFocus({ learningId }: LearnFocusProps) {
         )}
 
         {planText.length === 0 && (
-          <div className="flex flex-col gap-6 max-w-2xl">
+          <div className="flex flex-col gap-6 max-w-2xl flex-1 min-h-0">
             <div>
               <h1 className="font-serif text-2xl text-text-main font-semibold">
                 {resources.map((resource: { title: string }) => resource.title).join(" / ")}

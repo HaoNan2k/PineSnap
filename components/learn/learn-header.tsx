@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { Flame, User } from "lucide-react";
 
 export function LearnHeader() {
   return (
@@ -25,15 +26,11 @@ export function LearnHeader() {
       </Link>
       <div className="flex gap-4 items-center">
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-sand/40 shadow-sm text-text-secondary">
-          <span className="material-symbols-rounded text-orange-500 text-xl icon-filled">
-            local_fire_department
-          </span>
+          <Flame className="h-5 w-5 text-orange-500" aria-hidden />
           <span className="text-sm font-semibold text-text-main">12</span>
         </div>
         <button className="size-9 rounded-full overflow-hidden border border-sand/40 shadow-sm transition-transform hover:scale-105 bg-sand/30 flex items-center justify-center">
-          <span className="material-symbols-rounded text-forest-muted">
-            person
-          </span>
+          <User className="h-5 w-5 text-forest-muted" aria-hidden />
         </button>
       </div>
     </header>
