@@ -99,3 +99,4 @@ openspec validate    # 校验 OpenSpec 变更
 - **AI SDK v6（beta）**：本项目使用 **Vercel AI SDK v6 beta**（`ai@6.0.0-beta.169`、`@ai-sdk/react@3.0.0-beta.172`）。遇到类型/行为疑问时，必须查阅本仓库 `node_modules/ai` 和 `node_modules/@ai-sdk/react` 中的实际类型定义，而非外部文档。beta 版本可能存在 breaking changes，任何涉及 `useChat`、流式响应、data stream 的用法必须先对照当前版本的类型/行为。
 - **开发调试工具**：使用 `/dev/trace` 页面（仅开发环境）可以追踪和排查 AI 请求/响应问题。该工具会记录每次学习对话的完整上下文，包括请求消息、响应消息、输入 parts 等，支持按 `learningId` 和 `clientMessageId` 过滤查看。
 - **签名 URL**：文件通过稳定 ID 引用，但展示时使用短期签名 URL（Supabase Storage）
+- **长期维护文档（Capture 鉴权）**：`docs/capture-auth-data-model.md` 是扩展采集鉴权的数据模型真相文档。凡是修改 `CaptureAuthCode` / `CaptureToken` / `Resource` 关系、`/api/capture/extension/*`、`/api/capture/bilibili` 契约或 token 生命周期逻辑，必须同步更新该文档。

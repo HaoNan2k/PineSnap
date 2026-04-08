@@ -51,6 +51,21 @@ model CaptureToken {
   @@index([userId])
 }
 
+model CaptureAuthCode {
+  id            String   @id @default(uuid(7))
+  userId        String
+  codeHash      String   @unique
+  codeChallenge String
+  state         String
+  redirectUri   String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model Resource {
   id         String   @id @default(uuid(7))
   userId     String
