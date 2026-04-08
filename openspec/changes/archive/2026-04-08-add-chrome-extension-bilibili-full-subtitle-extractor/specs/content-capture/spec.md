@@ -1,85 +1,6 @@
-# content-capture Specification
+# content-capture / spec delta
 
-## Purpose
-
-本规范定义“跨站内容采集（Userscript）”的服务端行为、鉴权与持久化约束。采集的目标是将外部页面的结构化内容写入 PineSnap 的数据库，作为后续“素材库/二次加工/对话整理”的输入。
-
-> 说明：历史的演进过程请查看 `openspec/changes/**` 与 `openspec/changes/archive/**`。本文件仅描述当前实现应遵循的真相约束。
-## Requirements
-### Requirement: Capture requests MUST be authenticated by server-controlled tokens
-
-系统 SHALL 使用服务端生成的 `CaptureToken` 进行跨站采集鉴权；Token 可由扩展授权握手自动签发，不要求用户手工管理。
-
-#### Scenario: Extension token is accepted for bilibili capture
-
-- **WHEN** 扩展携带由服务端握手签发且包含 `capture:bilibili` scope 的 `Bearer` token 请求 `POST /api/capture/bilibili`
-- **THEN** 服务端 MUST 视为合法鉴权并继续执行 payload 校验与入库流程
-
-### Requirement: Bilibili capture endpoint MUST persist raw payload as Resource
-
-系统 SHALL 在接收到 B 站采集请求后创建 `Resource`，并将完整 payload 以结构化 JSON 形式写入 `Resource.content`（PostgreSQL `jsonb`）。
-
-系统 MUST 保持成功响应契约与标识语义稳定：成功时返回 `{ ok: true, resourceId: string }`，且 `resourceId` 继续对应 `Resource.id`。
-
-#### Scenario: 新旧 extractor 均使用同一持久化与响应契约
-
-- Given 扩展通过任一合法 extractor（新全量字幕或旧 AI 面板）生成 `VideoCapturePayloadV1`
-- When 请求通过鉴权并发送至 `POST /api/capture/bilibili`
-- Then 服务端 MUST 创建 `Resource` 并原样持久化 payload 到 `Resource.content`
-- And 服务端 MUST 返回 `{ ok: true, resourceId: string }`
-- And 本流程 MUST NOT 引入新的 resourceId 格式或额外映射字段
-
-### Requirement: Capture MUST NOT create conversations implicitly
-
-采集与对话 MUST 解耦：采集阶段仅负责入库素材，不应隐式创建 `Conversation/Message`。
-
-#### Scenario: No conversation is created during capture
-- **WHEN** 服务端处理 `POST /api/capture/bilibili` 的采集请求
-- **THEN** 服务端 MUST NOT 创建 `Conversation` 或 `Message`
-
-### Requirement: Capture endpoints MUST restrict CORS by allowlist
-
-采集端点在开启 CORS 的同时 MUST 采用 allowlist 限制可用 origin（避免被任意站点滥用）。
-
-#### Scenario: Only allow configured origins
-- **WHEN** 请求 `Origin` 不在 allowlist 中
-- **THEN** 响应 MUST NOT 包含 `access-control-allow-origin` 头
-
-### Requirement: Bilibili connection UX SHALL be extension-first in P0
-
-系统在 P0 阶段 SHALL 将 B 站连接主路径定义为 Chrome 扩展连接，不再要求用户通过 userscript 完成首次连接。
-
-#### Scenario: Connect page presents extension-first flow
-
-- **WHEN** 用户访问 `/connect/bilibili`
-- **THEN** 页面 MUST 展示“安装扩展 + 连接扩展”主流程
-- **AND** 主流程 MUST NOT 要求用户手工复制/粘贴 Capture Token
-
-### Requirement: Extension authorization SHALL support one-time code exchange
-
-系统 SHALL 提供扩展授权握手流程：授权确认后签发一次性授权码，扩展再交换 scope 为 `capture:bilibili` 的 Capture Token。
-
-#### Scenario: Authorized extension receives scoped capture token
-
-- **GIVEN** 用户已登录 PineSnap 且在授权页确认授权扩展
-- **WHEN** 扩展使用有效授权码与对应 verifier 发起 token 交换
-- **THEN** 服务端 MUST 返回可用于 `POST /api/capture/bilibili` 的 token
-- **AND** 该 token MUST 包含 `capture:bilibili` scope
-
-#### Scenario: Expired or consumed authorization code is rejected
-
-- **WHEN** 扩展使用过期或已消费的一次性授权码进行交换
-- **THEN** 服务端 MUST 拒绝请求并返回明确失败语义
-
-### Requirement: Legacy userscript flow MUST be disabled by default
-
-系统在 P0 中 MUST 将旧 userscript 连接路径设置为默认隐藏，仅作为应急回滚能力保留。
-
-#### Scenario: Legacy flow hidden unless explicitly enabled
-
-- **GIVEN** 部署未启用 legacy 开关
-- **WHEN** 用户访问连接页面
-- **THEN** 用户 MUST 看不到 userscript 安装主入口
+## ADDED Requirements
 
 ### Requirement: Chrome 扩展 SHALL 支持 B 站全量字幕优先采集
 
@@ -170,3 +91,18 @@
 - When 请求通过 `POST /api/capture/bilibili` 的 body 校验与鉴权
 - Then 服务端 MUST 将 `captureDiagnostics` 作为 `Resource.content.metadata` 的一部分原样保存
 
+## MODIFIED Requirements
+
+### Requirement: Bilibili capture endpoint MUST persist raw payload as Resource
+
+系统 SHALL 在接收到 B 站采集请求后创建 `Resource`，并将完整 payload 以结构化 JSON 形式写入 `Resource.content`（PostgreSQL `jsonb`）。
+
+系统 MUST 保持成功响应契约与标识语义稳定：成功时返回 `{ ok: true, resourceId: string }`，且 `resourceId` 继续对应 `Resource.id`。
+
+#### Scenario: 新旧 extractor 均使用同一持久化与响应契约
+
+- Given 扩展通过任一合法 extractor（新全量字幕或旧 AI 面板）生成 `VideoCapturePayloadV1`
+- When 请求通过鉴权并发送至 `POST /api/capture/bilibili`
+- Then 服务端 MUST 创建 `Resource` 并原样持久化 payload 到 `Resource.content`
+- And 服务端 MUST 返回 `{ ok: true, resourceId: string }`
+- And 本流程 MUST NOT 引入新的 resourceId 格式或额外映射字段
