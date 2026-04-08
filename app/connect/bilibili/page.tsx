@@ -5,22 +5,22 @@ import { prisma } from "@/lib/prisma";
 import { revokeCaptureTokensByScopeAndLabel } from "@/lib/db/capture-token";
 import {
   CheckCircle2,
-  AlertCircle,
-  LayoutDashboard,
-  Zap,
+  AlertTriangle,
   ShieldCheck,
-  Download,
   Puzzle,
-  ChevronRight,
-  HelpCircle,
-  ExternalLink
+  ExternalLink,
+  Link2,
 } from "lucide-react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-const LABEL = "Bilibili 连接";
-const TAMPERMONKEY_WEBSTORE_URL =
-  "https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo";
+const CHROME_EXTENSION_LABEL = "Bilibili 扩展";
+const LEGACY_EXTENSION_LABEL_PREFIX = "ChromeExtension:";
+const LEGACY_USERSCRIPT_LABEL = "Bilibili 连接";
+const CHROME_EXTENSION_STORE_URL =
+  process.env.NEXT_PUBLIC_CHROME_EXTENSION_STORE_URL?.trim() || null;
+const LEGACY_USERSCRIPT_ENABLED =
+  process.env.CAPTURE_ENABLE_USERSCRIPT_LEGACY === "true";
 
 export default async function Page() {
   const ctx = await createContext();
@@ -33,13 +33,16 @@ export default async function Page() {
 
   const userId = user.id;
 
-  // Check active connection status
   const activeCount = await prisma.captureToken.count({
     where: {
       userId,
       revokedAt: null,
-      label: LABEL,
       scopes: { has: "capture:bilibili" },
+      OR: [
+        { label: CHROME_EXTENSION_LABEL },
+        { label: LEGACY_USERSCRIPT_LABEL },
+        { label: { startsWith: LEGACY_EXTENSION_LABEL_PREFIX } },
+      ],
     },
   });
 
@@ -47,198 +50,168 @@ export default async function Page() {
 
   async function disconnect() {
     "use server";
+
     await revokeCaptureTokensByScopeAndLabel({
       userId,
       scope: "capture:bilibili",
-      label: LABEL,
+      label: CHROME_EXTENSION_LABEL,
+    });
+    await revokeCaptureTokensByScopeAndLabel({
+      userId,
+      scope: "capture:bilibili",
+      label: LEGACY_USERSCRIPT_LABEL,
+    });
+    await prisma.captureToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        scopes: { has: "capture:bilibili" },
+        label: { startsWith: LEGACY_EXTENSION_LABEL_PREFIX },
+      },
+      data: {
+        revokedAt: new Date(),
+      },
     });
     revalidatePath("/connect/bilibili");
   }
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans text-foreground">
-      {/* 顶部导航栏 */}
       <LearnHeader />
 
-      <main className="flex-1 container max-w-6xl mx-auto px-6 py-12 md:py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-16 items-start">
-          
-          {/* 左侧：介绍与价值 */}
-          <div className="space-y-12">
-            <div className="space-y-6">
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-                连接 Bilibili，<br />
-                让知识不再碎片化。
-              </h1>
-              <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
-                一键采集 B 站视频总结、AI 章节与字幕。将它们直接存入 PineSnap 素材库，成为你思考与创作的养料。
-              </p>
-            </div>
-
-            <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-1">
-              <div className="flex gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
-                  <Zap className="h-6 w-6" />
+      <main className="flex-1 container max-w-5xl mx-auto px-6 py-12 md:py-20">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_390px] gap-12 items-start">
+          <div className="space-y-8">
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+              连接 Chrome 扩展，
+              <br />
+              一键采集 B 站内容。
+            </h1>
+            <p className="text-lg text-muted-foreground leading-relaxed max-w-3xl">
+              PineSnap 现已切换为扩展优先连接。你无需安装油猴脚本，也无需手动复制
+              Token。完成连接后，在 B 站页面点击“存入 PineSnap”即可入库。
+            </p>
+            <div className="space-y-5">
+              <div className="flex gap-3 items-start">
+                <div className="mt-0.5 h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Puzzle className="h-4 w-4" />
                 </div>
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-lg">无缝嵌入</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    无需离开播放页。脚本会在页面通过极简 UI 提示，点击即可完成采集，不打断观看体验。
+                <div>
+                  <p className="font-semibold">步骤 1：安装扩展</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    前往 Chrome Web Store 安装 PineSnap Bilibili Capture 扩展。
                   </p>
                 </div>
               </div>
-
-              <div className="flex gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <LayoutDashboard className="h-6 w-6" />
+              <div className="flex gap-3 items-start">
+                <div className="mt-0.5 h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <Link2 className="h-4 w-4" />
                 </div>
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-lg">结构化入库</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    自动提取视频元数据、摘要与完整字幕，保持原始结构，为后续的 AI 对话与整理做好准备。
+                <div>
+                  <p className="font-semibold">步骤 2：在扩展中点击「连接 PineSnap」</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    扩展会打开授权页。确认授权后将自动完成连接，不需要手工配置 token。
                   </p>
                 </div>
               </div>
-
-              <div className="flex gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="h-6 w-6" />
+              <div className="flex gap-3 items-start">
+                <div className="mt-0.5 h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <ShieldCheck className="h-4 w-4" />
                 </div>
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-lg">隐私优先</h3>
-                  <p className="text-muted-foreground leading-relaxed">
-                    代码透明，按需运行。仅当你主动点击时才会读取当前页面内容，绝不进行后台监控或读取敏感数据。
+                <div>
+                  <p className="font-semibold">步骤 3：回到 B 站采集</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    打开任意 B 站视频页并刷新，点击页面上的“存入 PineSnap”完成采集。
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 右侧：操作面板 */}
-          <div className="relative">
-            <div className="rounded-3xl border bg-card text-card-foreground shadow-sm overflow-hidden sticky top-28">
-              
-              {/* 面板头部 */}
-              <div className="p-8 border-b bg-muted/30">
-                <div className="flex items-center gap-4">
-                  <div className={`h-12 w-12 rounded-xl flex items-center justify-center transition-colors ${
-                      isConnected 
-                      ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" 
+          <div className="rounded-3xl border bg-card shadow-sm overflow-hidden sticky top-24">
+            <div className="p-7 border-b bg-muted/30">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`h-11 w-11 rounded-xl flex items-center justify-center ${
+                    isConnected
+                      ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
                       : "bg-primary/10 text-primary"
-                  }`}>
-                    {isConnected ? <CheckCircle2 className="h-6 w-6" /> : <Puzzle className="h-6 w-6" />}
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-lg">{isConnected ? "已连接" : "设置连接器"}</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {isConnected ? "随时可以使用" : "只需简单两步"}
-                    </p>
-                  </div>
+                  }`}
+                >
+                  {isConnected ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <Puzzle className="h-5 w-5" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-semibold text-lg">
+                    {isConnected ? "已连接" : "等待连接"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {isConnected ? "扩展可直接采集" : "完成下方操作即可开始使用"}
+                  </p>
                 </div>
               </div>
+            </div>
 
-              <div className="p-8 space-y-8">
-                
-                {!isConnected ? (
-                  <div className="space-y-8">
-                    {/* Step 1 */}
-                    <div className="relative pl-8 before:absolute before:left-[11px] before:top-8 before:bottom-[-32px] before:w-[2px] before:bg-border last:before:hidden">
-                      <div className="absolute left-0 top-1 h-6 w-6 rounded-full border-2 border-primary bg-background flex items-center justify-center text-[10px] font-bold text-primary">
-                        1
-                      </div>
-                      <div className="space-y-3">
-                        <div className="space-y-1">
-                          <h3 className="font-medium">安装运行环境</h3>
-                          <p className="text-sm text-muted-foreground">
-                            需要 Tampermonkey 扩展来运行连接器脚本。
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          asChild
-                          className="h-9 text-xs font-medium gap-2"
-                        >
-                          <a
-                            href={TAMPERMONKEY_WEBSTORE_URL}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            前往 Chrome Web Store 安装
-                          </a>
-                        </Button>
-                      </div>
-                    </div>
+            <div className="p-7 space-y-3">
+              {CHROME_EXTENSION_STORE_URL ? (
+                <Button asChild className="w-full h-11 rounded-xl font-bold">
+                  <a href={CHROME_EXTENSION_STORE_URL} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    安装 Chrome 扩展
+                  </a>
+                </Button>
+              ) : (
+                <Button disabled className="w-full h-11 rounded-xl font-bold">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  安装 Chrome 扩展（暂未配置商店链接）
+                </Button>
+              )}
 
-                    {/* Step 2 */}
-                    <div className="relative pl-8">
-                      <div className="absolute left-0 top-1 h-6 w-6 rounded-full border-2 border-primary bg-background flex items-center justify-center text-[10px] font-bold text-primary">
-                        2
-                      </div>
-                      <div className="space-y-4">
-                        <div className="space-y-1">
-                          <h3 className="font-medium">启用连接器</h3>
-                          <p className="text-sm text-muted-foreground">
-                            一键安装脚本，建立与 PineSnap 的安全连接。
-                          </p>
-                        </div>
-                        <Button
-                          asChild
-                          className="w-full rounded-xl h-11 text-sm font-bold shadow-md hover:shadow-lg transition-all"
-                        >
-                          <a href="/connect/bilibili/install.user.js">
-                            <Download className="mr-2 h-4 w-4" />
-                            安装连接器脚本
-                          </a>
-                        </Button>
-                      </div>
-                    </div>
+              <Button asChild variant="outline" className="w-full h-11 rounded-xl">
+                <a href="chrome://extensions">打开扩展管理页</a>
+              </Button>
 
-                    {/* Troubleshooting */}
-                    <details className="group pt-4 border-t">
-                      <summary className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none">
-                        <HelpCircle className="h-3.5 w-3.5" />
-                        <span>安装遇到问题？</span>
-                        <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-                      </summary>
-                      <div className="mt-3 p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground leading-relaxed space-y-2">
-                        <p>如果看到“无法从该网站添加应用...”，说明浏览器未检测到 Tampermonkey。</p>
-                        <ul className="list-disc pl-4 space-y-1">
-                          <li>请确认已完成<b>步骤 1</b>并成功安装 Tampermonkey。</li>
-                          <li>安装后可能需要刷新本页面。</li>
-                          <li>再次点击<b>步骤 2</b>的按钮即可。</li>
-                        </ul>
-                      </div>
-                    </details>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="p-4 bg-green-50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-900/20 text-sm text-green-800 dark:text-green-300">
-                      连接器运行正常。请打开 B 站视频页并 <strong className="font-extrabold underline decoration-green-500/50 underline-offset-2">刷新页面</strong>，即可看到 PineSnap 图标。
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <Button asChild variant="outline" className="w-full justify-start h-10">
-                        <a href="/connect/bilibili/install.user.js">
-                          <Download className="mr-2 h-4 w-4" />
-                          重新安装 / 更新脚本
-                        </a>
-                      </Button>
-                      <form action={disconnect}>
-                        <Button
-                          type="submit"
-                          variant="ghost"
-                          className="w-full justify-start h-10 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        >
-                          <AlertCircle className="mr-2 h-4 w-4" />
-                          断开连接
-                        </Button>
-                      </form>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {isConnected ? (
+                <p className="text-xs text-green-700 dark:text-green-400 pt-2">
+                  连接正常。请在扩展设置中确认目标 PineSnap 地址后开始采集。
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground pt-2">
+                  尚未连接时，扩展会在采集时自动引导你完成授权。
+                </p>
+              )}
+
+              {!CHROME_EXTENSION_STORE_URL ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  当前环境未设置扩展商店地址，请联系管理员配置
+                  `NEXT_PUBLIC_CHROME_EXTENSION_STORE_URL`。
+                </p>
+              ) : null}
+
+              <form action={disconnect} className="pt-2">
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  className="w-full h-10 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                >
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  撤销连接
+                </Button>
+              </form>
+
+              {LEGACY_USERSCRIPT_ENABLED ? (
+                <div className="pt-4 border-t">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Legacy 回滚入口（临时）：仅用于历史兼容排障。
+                  </p>
+                  <Button asChild variant="outline" className="w-full h-10 rounded-xl">
+                    <a href="/connect/bilibili/install.user.js">打开旧版 userscript 连接</a>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -248,7 +221,7 @@ export default async function Page() {
         <div className="container flex items-center justify-center gap-4 text-xs text-muted-foreground uppercase tracking-wider font-medium">
           <span>PineSnap Bilibili Connector</span>
           <span className="text-border">•</span>
-          <span>V0.4.3</span>
+          <span>V0.5.0</span>
           <span className="text-border">•</span>
           <span>Powered by OpenSpec</span>
         </div>

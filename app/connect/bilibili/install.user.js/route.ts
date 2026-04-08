@@ -3,6 +3,7 @@ import { getAuthenticatedUserId } from "@/lib/supabase/auth";
 import { SCRIPT_TEMPLATE } from "./script.template";
 
 const LABEL = "Bilibili 连接";
+const LEGACY_ENABLED = process.env.CAPTURE_ENABLE_USERSCRIPT_LEGACY === "true";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,10 @@ async function buildScript(args: { baseUrl: string; token: string }): Promise<st
 }
 
 export async function GET(req: Request) {
+  if (!LEGACY_ENABLED) {
+    return new Response("Legacy userscript flow is disabled", { status: 410 });
+  }
+
   const userId = await getAuthenticatedUserId();
   if (!userId) {
     const url = new URL(req.url);

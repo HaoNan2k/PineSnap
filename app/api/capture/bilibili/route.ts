@@ -2,22 +2,7 @@ import { z } from "zod";
 import { logError } from "@/lib/logger";
 import { verifyCaptureToken } from "@/lib/db/capture-token";
 import { createResource } from "@/lib/db/resource";
-
-const ALLOWED_ORIGINS = new Set(["https://www.bilibili.com"]);
-
-function getCorsHeaders(req: Request): HeadersInit {
-  const origin = req.headers.get("origin");
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
-    return {
-      "access-control-allow-origin": origin,
-      "access-control-allow-methods": "POST, OPTIONS",
-      "access-control-allow-headers": "authorization, content-type",
-      "access-control-max-age": "86400",
-      vary: "origin",
-    };
-  }
-  return {};
-}
+import { getCaptureCorsHeaders } from "@/lib/capture/cors";
 
 function extractBearerToken(req: Request): string | null {
   const raw = req.headers.get("authorization");
@@ -46,6 +31,8 @@ const payloadSchema = z.object({
     id: z.string().optional(),
     url: z.string().url(),
     title: z.string().optional(),
+    /** 可选：扩展端自检/排障元数据，原样写入 Resource.content */
+    captureDiagnostics: z.record(z.string(), z.unknown()).optional(),
   }),
   content: z.object({
     summary: z
@@ -66,11 +53,11 @@ const payloadSchema = z.object({
 });
 
 export async function OPTIONS(req: Request) {
-  return new Response(null, { status: 204, headers: getCorsHeaders(req) });
+  return new Response(null, { status: 204, headers: getCaptureCorsHeaders(req) });
 }
 
 export async function POST(req: Request) {
-  const corsHeaders = getCorsHeaders(req);
+  const corsHeaders = getCaptureCorsHeaders(req);
 
   try {
     const token = extractBearerToken(req);
