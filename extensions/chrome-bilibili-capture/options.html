@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PineSnap Bilibili Capture</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: #f7f7f5;
+        color: #111;
+      }
+
+      main {
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 24px;
+      }
+
+      .card {
+        padding: 24px;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0 0 20px;
+        color: #555;
+        line-height: 1.6;
+      }
+
+      .muted {
+        color: #666;
+        font-size: 13px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 14px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 8px;
+        padding: 12px 14px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        font-size: 14px;
+      }
+
+      button {
+        margin-top: 8px;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 10px;
+        background: #111;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: #fff;
+        color: #111;
+        border: 1px solid #ddd;
+      }
+
+      #status {
+        margin-top: 14px;
+        min-height: 20px;
+        color: #0a7a32;
+      }
+
+      #connected {
+        margin-top: 8px;
+        color: #0a7a32;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <h1>PineSnap Bilibili Capture</h1>
+        <p>扩展优先连接：登录 PineSnap 后一键授权，无需手动复制 token。</p>
+        <form id="config-form">
+          <label>
+            PineSnap Base URL
+            <input id="base-url" type="url" placeholder="http://localhost:3000" />
+          </label>
+          <button type="button" id="connect-btn">连接 PineSnap</button>
+          <button type="submit" class="secondary">仅保存地址</button>
+          <div id="connected"></div>
+          <div id="status"></div>
+        </form>
+        <p class="muted">
+          若连接失败，请确认 PineSnap 服务端已配置 <code>CAPTURE_CORS_ALLOWED_ORIGINS</code> 包含当前扩展 Origin。
+        </p>
+      </div>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
