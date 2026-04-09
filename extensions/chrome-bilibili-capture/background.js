@@ -165,13 +165,77 @@ async function fetchJson(url, options = {}) {
 }
 
 async function uploadCapture(baseUrl, token, payload) {
-  const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/capture/bilibili`, {
+  const sourceUrl =
+    typeof payload?.metadata?.url === "string" && payload.metadata.url.trim()
+      ? payload.metadata.url.trim()
+      : "";
+  const sourceId =
+    typeof payload?.metadata?.id === "string" ? payload.metadata.id : "";
+  const provider =
+    typeof payload?.content?.transcript?.provider === "string"
+      ? payload.content.transcript.provider
+      : typeof payload?.content?.summary?.provider === "string"
+        ? payload.content.summary.provider
+        : "unknown";
+  const digestInput = `${sourceUrl}|${sourceId}|${provider}`;
+  const digestBuffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(digestInput)
+  );
+  const digestHex = Array.from(new Uint8Array(digestBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const captureRequestId = digestHex.slice(0, 32);
+
+  let artifact = null;
+  if (payload?.content?.transcript) {
+    artifact = {
+      kind: "official_subtitle",
+      language:
+        typeof payload.content.transcript.language === "string"
+          ? payload.content.transcript.language
+          : undefined,
+      format: "cue_lines",
+      content: payload.content.transcript,
+      isPrimary: true,
+    };
+  } else if (payload?.content?.summary) {
+    artifact = {
+      kind: "summary",
+      format: "json",
+      content: payload.content.summary,
+      isPrimary: true,
+    };
+  }
+
+  const requestBody = {
+    captureContext: {
+      schemaVersion: 1,
+      sourceType: "bilibili",
+      sourceUrl,
+      captureRequestId,
+      capturedAt: new Date().toISOString(),
+      providerContext: {
+        bilibili: {
+          bvid: sourceId || undefined,
+        },
+      },
+    },
+    title:
+      typeof payload?.metadata?.title === "string" && payload.metadata.title.trim()
+        ? `B站：${payload.metadata.title.trim()}`.slice(0, 80)
+        : "B站采集",
+    externalId: sourceId || undefined,
+    artifact: artifact || undefined,
+  };
+
+  const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/capture/jobs`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestBody),
   });
 
   const body = await response.json().catch(() => ({}));

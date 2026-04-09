@@ -13,8 +13,13 @@ export const resourceRouter = router({
       const start = Date.now();
       const resources = await getUserResources(ctx.user.id);
       const afterFetch = Date.now();
+      const mapped = resources.map((resource) => ({
+        ...resource,
+        activeJob: resource.captureJobs[0] ?? null,
+        primaryArtifact: resource.artifacts[0] ?? null,
+      }));
       if (input?.type) {
-        const filtered = resources.filter((r) => r.type === input.type);
+        const filtered = mapped.filter((r) => r.type === input.type);
         const afterFilter = Date.now();
         console.info("[perf] resource.list", {
           userId: ctx.user.id,
@@ -31,9 +36,9 @@ export const resourceRouter = router({
         userId: ctx.user.id,
         fetchMs: afterFetch - start,
         totalMs: afterNoFilter - start,
-        resultCount: resources.length,
+        resultCount: mapped.length,
       });
-      return resources;
+      return mapped;
     }),
 
   get: protectedProcedure

@@ -5,6 +5,11 @@ import { createHash, randomBytes } from "crypto";
 
 export type CaptureTokenScope = `capture:${string}`;
 
+export function tokenHasScope(scopes: string[], requiredScope: string): boolean {
+  if (scopes.includes(requiredScope)) return true;
+  return scopes.includes("capture:*");
+}
+
 export type CaptureTokenPublic = {
   id: string;
   label: string | null;
@@ -132,7 +137,7 @@ export async function verifyCaptureToken(args: {
 
   if (!record) return { ok: false, status: 401 };
   if (record.revokedAt) return { ok: false, status: 401 };
-  if (!record.scopes.includes(args.requiredScope)) return { ok: false, status: 403 };
+  if (!tokenHasScope(record.scopes, args.requiredScope)) return { ok: false, status: 403 };
 
   await prisma.captureToken.update({
     where: { id: record.id },
@@ -140,5 +145,32 @@ export async function verifyCaptureToken(args: {
   });
 
   return { ok: true, userId: record.userId, tokenId: record.id };
+}
+
+export async function verifyCaptureTokenForAnyCaptureScope(args: {
+  token: string;
+}): Promise<
+  | { ok: true; userId: string; tokenId: string; scopes: string[] }
+  | { ok: false; status: 401 | 403 }
+> {
+  const tokenHash = hashCaptureToken(args.token);
+
+  const record = await prisma.captureToken.findUnique({
+    where: { tokenHash },
+    select: { id: true, userId: true, revokedAt: true, scopes: true },
+  });
+
+  if (!record) return { ok: false, status: 401 };
+  if (record.revokedAt) return { ok: false, status: 401 };
+  if (!record.scopes.some((scope) => scope.startsWith("capture:"))) {
+    return { ok: false, status: 403 };
+  }
+
+  await prisma.captureToken.update({
+    where: { id: record.id },
+    data: { lastUsedAt: new Date() },
+  });
+
+  return { ok: true, userId: record.userId, tokenId: record.id, scopes: record.scopes };
 }
 

@@ -26,6 +26,46 @@ import {
 } from "@/lib/learn/clarify";
 import { logError } from "@/lib/logger";
 
+function getLearningContentFromResource(resource: {
+  content: unknown;
+  artifacts?: Array<{ kind: string; language: string | null; content: unknown }>;
+}) {
+  const primaryArtifact = resource.artifacts?.[0];
+  if (!primaryArtifact) return resource.content;
+
+  if (
+    primaryArtifact.kind === "official_subtitle" ||
+    primaryArtifact.kind === "asr_transcript"
+  ) {
+    return {
+      content: {
+        transcript: {
+          provider: primaryArtifact.kind,
+          language: primaryArtifact.language ?? undefined,
+          ...(typeof primaryArtifact.content === "object" &&
+          primaryArtifact.content !== null
+            ? (primaryArtifact.content as Record<string, unknown>)
+            : { text: String(primaryArtifact.content) }),
+        },
+      },
+    };
+  }
+
+  if (primaryArtifact.kind === "summary") {
+    return {
+      content: {
+        summary:
+          typeof primaryArtifact.content === "object" &&
+          primaryArtifact.content !== null
+            ? (primaryArtifact.content as Record<string, unknown>)
+            : { text: String(primaryArtifact.content) },
+      },
+    };
+  }
+
+  return resource.content;
+}
+
 /**
  * Helper to get learning with access check, throws TRPCError on failure.
  * Avoids repeated code and non-null assertions.
@@ -146,7 +186,7 @@ export const learningRouter = router({
         resources.map((resource) => ({
           title: resource.title,
           type: resource.type,
-          content: resource.content,
+          content: getLearningContentFromResource(resource),
         }))
       );
 
@@ -264,7 +304,7 @@ export const learningRouter = router({
         resources.map((resource) => ({
           title: resource.title,
           type: resource.type,
-          content: resource.content,
+          content: getLearningContentFromResource(resource),
         }))
       );
 

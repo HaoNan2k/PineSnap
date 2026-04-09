@@ -54,6 +54,8 @@
         return "未检测到可用字幕轨。";
       case "SUBTITLE_FETCH_FAILED":
         return "字幕拉取失败，请稍后重试。";
+      case "SUBTITLE_TRACK_UNSTABLE":
+        return "字幕轨道返回不稳定，请稍后重试。";
       default:
         return "采集失败，请打开控制台查看详情。";
     }
@@ -130,6 +132,7 @@
       toast("已存入 PineSnap 素材库。");
       console.info("[PineSnap capture] success", {
         resourceId: upload.body?.resourceId,
+        jobId: upload.body?.jobId,
         provider: result.provider,
         attempts: result.attempts,
       });
