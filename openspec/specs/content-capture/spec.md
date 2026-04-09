@@ -2,171 +2,81 @@
 
 ## Purpose
 
-本规范定义“跨站内容采集（Userscript）”的服务端行为、鉴权与持久化约束。采集的目标是将外部页面的结构化内容写入 PineSnap 的数据库，作为后续“素材库/二次加工/对话整理”的输入。
+本规范定义跨来源内容采集的当前真相约束。系统以 `CaptureContext` + `CaptureJob` + `CaptureArtifact` 为核心模型，统一通过 `POST /api/capture/jobs` 入库。
 
-> 说明：历史的演进过程请查看 `openspec/changes/**` 与 `openspec/changes/archive/**`。本文件仅描述当前实现应遵循的真相约束。
 ## Requirements
+
 ### Requirement: Capture requests MUST be authenticated by server-controlled tokens
 
-系统 SHALL 使用服务端生成的 `CaptureToken` 进行跨站采集鉴权；Token 可由扩展授权握手自动签发，不要求用户手工管理。
+系统 MUST 使用服务端签发的 `CaptureToken` 做鉴权，并按来源 scope 校验权限。
 
-#### Scenario: Extension token is accepted for bilibili capture
+#### Scenario: Scoped extension token is accepted for capture jobs
 
-- **WHEN** 扩展携带由服务端握手签发且包含 `capture:bilibili` scope 的 `Bearer` token 请求 `POST /api/capture/bilibili`
-- **THEN** 服务端 MUST 视为合法鉴权并继续执行 payload 校验与入库流程
+- **WHEN** 扩展携带包含对应 `capture:<sourceType>` scope 的 Bearer token 请求 `POST /api/capture/jobs`
+- **THEN** 服务端 MUST 通过鉴权并继续执行 body 校验与入库流程
 
-### Requirement: Bilibili capture endpoint MUST persist raw payload as Resource
+### Requirement: Capture ingestion MUST use unified jobs endpoint only
 
-系统 SHALL 在接收到 B 站采集请求后创建 `Resource`，并将完整 payload 以结构化 JSON 形式写入 `Resource.content`（PostgreSQL `jsonb`）。
+系统 MUST 仅保留 `POST /api/capture/jobs` 作为采集入口，不允许保留历史兼容 API。
 
-系统 MUST 保持成功响应契约与标识语义稳定：成功时返回 `{ ok: true, resourceId: string }`，且 `resourceId` 继续对应 `Resource.id`。
+#### Scenario: Unified endpoint is the only capture ingress
 
-#### Scenario: 新旧 extractor 均使用同一持久化与响应契约
+- **WHEN** 开发者检查当前采集 API
+- **THEN** 采集入口 MUST 仅为 `POST /api/capture/jobs`
+- **AND** 系统 MUST NOT 依赖任何历史兼容采集入口
 
-- Given 扩展通过任一合法 extractor（新全量字幕或旧 AI 面板）生成 `VideoCapturePayloadV1`
-- When 请求通过鉴权并发送至 `POST /api/capture/bilibili`
-- Then 服务端 MUST 创建 `Resource` 并原样持久化 payload 到 `Resource.content`
-- And 服务端 MUST 返回 `{ ok: true, resourceId: string }`
-- And 本流程 MUST NOT 引入新的 resourceId 格式或额外映射字段
+### Requirement: Capture MUST persist Resource and Job atomically with idempotency
+
+系统 MUST 在同一幂等流程中处理 `Resource` 与 `CaptureJob` 的创建，避免并发下出现孤儿数据。
+
+#### Scenario: Duplicate capture request returns existing job
+
+- **GIVEN** 同一用户对同一来源重复提交相同 `(userId, sourceType, captureRequestId)`
+- **WHEN** 请求到达 `POST /api/capture/jobs`
+- **THEN** 服务端 MUST 命中同一条已存在 `CaptureJob`
+- **AND** 服务端 MUST 返回已有 `resourceId` 与 `jobId`
 
 ### Requirement: Capture MUST NOT create conversations implicitly
 
-采集与对话 MUST 解耦：采集阶段仅负责入库素材，不应隐式创建 `Conversation/Message`。
+采集流程 MUST 与聊天流程解耦，采集请求不应隐式创建 `Conversation/Message`。
 
-#### Scenario: No conversation is created during capture
-- **WHEN** 服务端处理 `POST /api/capture/bilibili` 的采集请求
+#### Scenario: No conversation created during capture
+
+- **WHEN** 服务端处理 `POST /api/capture/jobs`
 - **THEN** 服务端 MUST NOT 创建 `Conversation` 或 `Message`
 
 ### Requirement: Capture endpoints MUST restrict CORS by allowlist
 
-采集端点在开启 CORS 的同时 MUST 采用 allowlist 限制可用 origin（避免被任意站点滥用）。
+采集相关路由 MUST 使用 allowlist 限制可用 Origin。
 
-#### Scenario: Only allow configured origins
+#### Scenario: Non-allowlisted origin is rejected by CORS policy
+
 - **WHEN** 请求 `Origin` 不在 allowlist 中
-- **THEN** 响应 MUST NOT 包含 `access-control-allow-origin` 头
-
-### Requirement: Bilibili connection UX SHALL be extension-first in P0
-
-系统在 P0 阶段 SHALL 将 B 站连接主路径定义为 Chrome 扩展连接，不再要求用户通过 userscript 完成首次连接。
-
-#### Scenario: Connect page presents extension-first flow
-
-- **WHEN** 用户访问 `/connect/bilibili`
-- **THEN** 页面 MUST 展示“安装扩展 + 连接扩展”主流程
-- **AND** 主流程 MUST NOT 要求用户手工复制/粘贴 Capture Token
+- **THEN** 响应 MUST NOT 返回允许该 Origin 的 CORS 头
 
 ### Requirement: Extension authorization SHALL support one-time code exchange
 
-系统 SHALL 提供扩展授权握手流程：授权确认后签发一次性授权码，扩展再交换 scope 为 `capture:bilibili` 的 Capture Token。
+系统 SHALL 提供授权码握手：用户确认授权后签发一次性 code，扩展再兑换 `CaptureToken`。
 
-#### Scenario: Authorized extension receives scoped capture token
+#### Scenario: Authorized extension receives scoped token
 
-- **GIVEN** 用户已登录 PineSnap 且在授权页确认授权扩展
-- **WHEN** 扩展使用有效授权码与对应 verifier 发起 token 交换
-- **THEN** 服务端 MUST 返回可用于 `POST /api/capture/bilibili` 的 token
-- **AND** 该 token MUST 包含 `capture:bilibili` scope
+- **GIVEN** 用户已登录并完成扩展授权
+- **WHEN** 扩展使用有效 `code` 与 `codeVerifier` 调用 exchange
+- **THEN** 服务端 MUST 返回可用于 `POST /api/capture/jobs` 的 token
+- **AND** 该 token MUST 至少包含一个 `capture:*` 范围内 scope
 
-#### Scenario: Expired or consumed authorization code is rejected
+#### Scenario: Invalid or consumed code is rejected
 
-- **WHEN** 扩展使用过期或已消费的一次性授权码进行交换
+- **WHEN** 扩展使用过期或已消费 code 进行 exchange
 - **THEN** 服务端 MUST 拒绝请求并返回明确失败语义
 
-### Requirement: Legacy userscript flow MUST be disabled by default
+### Requirement: Capture job stages MUST use normal operational values only
 
-系统在 P0 中 MUST 将旧 userscript 连接路径设置为默认隐藏，仅作为应急回滚能力保留。
+`CaptureJob.stage` MUST 仅表示运行态语义，不允许保留历史迁移专用阶段值。
 
-#### Scenario: Legacy flow hidden unless explicitly enabled
+#### Scenario: Job stage excludes historical migration state
 
-- **GIVEN** 部署未启用 legacy 开关
-- **WHEN** 用户访问连接页面
-- **THEN** 用户 MUST 看不到 userscript 安装主入口
-
-### Requirement: Chrome 扩展 SHALL 支持 B 站全量字幕优先采集
-
-系统 SHALL 支持在 Chrome 扩展中执行“一次触发式”采集，优先获取全量字幕并发送至 PineSnap。
-
-#### Scenario: 全量字幕优先路径成功
-
-- Given 用户在 Chrome 扩展中触发“发送到 PineSnap”
-- And 扩展可从页面上下文与字幕轨/API 中获取可用字幕 body
-- When 扩展构造采集 payload
-- Then payload MUST 继续使用既有 `VideoCapturePayloadV1` key 结构
-- And `content.transcript.lines` MUST 包含全量或可验证完整度的字幕行集合
-- And `content.transcript.provider` MUST 标识当前 extractor（例如 `bilibili_full_subtitle_v1`）
-
-### Requirement: 旧 AI 小助手面板 extractor MUST 保留代码但不参与默认执行链
-
-系统在引入新 extractor 后 MUST 保留既有 AI 小助手面板提取代码路径，但默认不参与应用层采集执行链。
-
-#### Scenario: 默认执行链仅包含全量字幕主路径
-
-- Given 扩展默认运行时配置
-- When 扩展执行一次采集
-- Then 系统 MUST 仅执行 `bilibili_full_subtitle_v1` 作为主路径
-- And 旧 extractor 代码路径 MUST NOT 被删除
-
-### Requirement: Extractor 体系 MUST 可扩展且无冲突
-
-系统 MUST 采用可插拔 extractor 结构，避免重复逻辑、结果冲突与不可观测行为。
-
-#### Scenario: 历史 extractor 并存时的统一编排
-
-- Given 系统同时存在 `bilibili_full_subtitle_v1` 与 `bilibili_ai_assistant_panel` 等 extractor 代码
-- When 扩展执行同一轮采集
-- Then 编排器 MUST 按默认 provider allowlist 执行 extractor
-- And 默认 allowlist MUST 仅包含 `bilibili_full_subtitle_v1`
-- And 每个 extractor MUST 使用唯一 provider id，避免语义冲突
-
-### Requirement: Bilibili subtitle API requests MUST use browser login credentials
-
-扩展访问 `api.bilibili.com` 的字幕相关 API 时 MUST 携带浏览器登录态凭据，以避免“网页已登录但 API 视角匿名”导致字幕轨缺失。
-
-#### Scenario: Logged-in user receives subtitle tracks via API
-
-- Given 用户在浏览器中已登录 Bilibili
-- When 扩展请求 `x/player/v2` 等字幕相关接口
-- Then 请求 MUST 采用可传递登录态凭据的策略
-- And 返回中的登录态与字幕轨信息 MUST 与页面登录状态一致
-
-### Requirement: CID resolution MUST support validated fallback lookup
-
-扩展 MUST 先从页面上下文解析 `cid`；若缺失且存在 `bvid/aid`，MUST 通过可验证的 API 反查方式补齐当前分 P 对应 `cid`，不得伪造值。
-
-#### Scenario: Missing embedded cid is resolved via pagelist lookup
-
-- Given 页面内嵌状态缺失 `cid` 但存在 `bvid` 或 `aid`
-- When 扩展执行采集前上下文解析
-- Then 系统 MUST 通过 pagelist 等可验证 API 反查 `cid`
-- And `captureDiagnostics` MUST 记录 `cidSource`
-
-### Requirement: Chrome 扩展开发与验证流程 MUST 文档化
-
-系统 MUST 在 `docs/` 提供可执行的扩展开发与发布前验证文档，确保团队可复现实现与验收过程。
-
-#### Scenario: 团队成员按文档完成本地验证
-
-- Given 开发者按 `docs/` 文档进行扩展本地加载与配置
-- When 开发者执行发布前验证清单
-- Then 文档 MUST 覆盖“采集成功路径”与“关键失败路径”的验证步骤
-- And 文档 MUST 包含调试入口（页面日志、Service Worker 日志、网络请求检查）
-
-### Requirement: Bilibili capture MUST allow extension origins via configured CORS allowlist
-
-当客户端为 Chrome 扩展（Service Worker 发起 `fetch`）时，请求 `Origin` 为 `chrome-extension://<extension-id>`。系统 MUST 支持通过服务端配置（例如环境变量 `CAPTURE_CORS_ALLOWED_ORIGINS`，逗号分隔）将该类 Origin 纳入采集端点 CORS allowlist，以便预检与跨域响应可读。
-
-#### Scenario: Allowlisted chrome-extension origin receives CORS headers
-
-- Given 部署配置将某一 `chrome-extension://` Origin 列入 `CAPTURE_CORS_ALLOWED_ORIGINS`
-- When 客户端从该扩展发起对 `POST /api/capture/bilibili` 的跨域请求且 `Origin` 匹配
-- Then 响应 MUST 包含与该 `Origin` 匹配的 `access-control-allow-origin`（或与现有 allowlist 规则一致的成功 CORS 语义）
-
-### Requirement: Bilibili capture payload MAY include optional capture diagnostics
-
-`VideoCapturePayloadV1` 的 `metadata` MAY 包含可选字段 `captureDiagnostics`（JSON 对象），用于客户端自检、完整度提示或排障。系统 MUST 在校验通过后将其与其余 `metadata` 一并持久化到 `Resource.content`，不得静默剥离。
-
-#### Scenario: Payload with captureDiagnostics is stored intact
-
-- Given 扩展发送的 payload 在 `metadata.captureDiagnostics` 下包含任意 JSON 兼容键值
-- When 请求通过 `POST /api/capture/bilibili` 的 body 校验与鉴权
-- Then 服务端 MUST 将 `captureDiagnostics` 作为 `Resource.content.metadata` 的一部分原样保存
+- **WHEN** 系统定义或写入 `CaptureJob.stage`
+- **THEN** 阶段值 MUST 仅来自运行期状态集合（如 `QUEUED/CLAIMED/COMPLETED/FAILED/CANCELLED`）
+- **AND** 系统 MUST NOT 使用导入专用阶段值（例如 `IMPORTED`）
 

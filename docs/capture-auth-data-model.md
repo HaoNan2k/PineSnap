@@ -2,14 +2,14 @@
 
 本文是 PineSnap「浏览器扩展采集鉴权」的长期真相文档，描述 `CaptureAuthCode`、`CaptureToken` 与 `Resource` 的职责、关系和生命周期。
 
-> 适用范围：`/connect/bilibili/authorize`、`/api/capture/extension/*`、`/api/capture/bilibili`。
+> 适用范围：`/connect/bilibili/authorize`、`/api/capture/extension/*`、`/api/capture/jobs`。
 
 ## 1. 先回答：`CaptureToken` 还有用吗？
 
 有，而且是**核心运行时凭证**。
 
 - `CaptureAuthCode` 只用于短时握手（一次性 code）。
-- 扩展真正调用 `POST /api/capture/bilibili` 时，携带的是 `CaptureToken`（Bearer）。
+- 扩展真正调用采集接口（默认 `POST /api/capture/jobs`）时，携带的是 `CaptureToken`（Bearer）。
 - 服务端在 `verifyCaptureToken()` 中校验 token 哈希、撤销状态、scope（`capture:bilibili`）。
 
 结论：`CaptureAuthCode` 是“发证过程”，`CaptureToken` 是“持证运行”。
@@ -70,14 +70,14 @@ flowchart LR
 - Token 签发/校验/撤销：`lib/db/capture-token.ts`
 - 授权码签发路由：`app/api/capture/extension/authorize/route.ts`
 - token 兑换路由：`app/api/capture/extension/exchange/route.ts`
-- 采集入库路由：`app/api/capture/bilibili/route.ts`
+- 统一采集入口：`app/api/capture/jobs/route.ts`
 
 ## 5. 变更时必须同步检查
 
 当你修改以下任一项时，必须同步更新本文：
 
 1. `CaptureAuthCode` / `CaptureToken` / `Resource` 的字段或语义
-2. `authorize` / `exchange` / `bilibili capture` 任一路由契约
+2. `authorize` / `exchange` / `capture jobs` 任一路由契约
 3. token 轮换策略（`label`、`scope`、撤销逻辑）
 4. CORS 与扩展来源限制策略
 
