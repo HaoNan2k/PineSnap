@@ -76,13 +76,19 @@ async function parseJson<T>(response: Response): Promise<T> {
 }
 
 export async function uploadAudioToAssemblyAi(audioBytes: Uint8Array): Promise<string> {
+  const normalizedBytes = Uint8Array.from(audioBytes);
+  const uploadBody = normalizedBytes.buffer.slice(
+    normalizedBytes.byteOffset,
+    normalizedBytes.byteOffset + normalizedBytes.byteLength
+  );
+
   const response = await fetch(`${getAssemblyAiBaseUrl()}/v2/upload`, {
     method: "POST",
     headers: {
       ...buildHeaders(),
       "content-type": "application/octet-stream",
     },
-    body: audioBytes,
+    body: uploadBody,
   });
 
   if (!response.ok) {
