@@ -8,22 +8,17 @@ import { TRPCError } from "@trpc/server";
 
 export const resourceRouter = router({
   list: protectedProcedure
-    .input(z.object({ type: z.string().optional() }).optional())
+    .input(z.object({ sourceType: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const start = Date.now();
       const resources = await getUserResources(ctx.user.id);
       const afterFetch = Date.now();
-      const mapped = resources.map((resource) => ({
-        ...resource,
-        activeJob: resource.captureJobs[0] ?? null,
-        primaryArtifact: resource.artifacts[0] ?? null,
-      }));
-      if (input?.type) {
-        const filtered = mapped.filter((r) => r.type === input.type);
+      if (input?.sourceType) {
+        const filtered = resources.filter((r) => r.sourceType === input.sourceType);
         const afterFilter = Date.now();
         console.info("[perf] resource.list", {
           userId: ctx.user.id,
-          filterType: input.type,
+          filterSourceType: input.sourceType,
           fetchMs: afterFetch - start,
           filterMs: afterFilter - afterFetch,
           totalMs: afterFilter - start,
@@ -36,9 +31,9 @@ export const resourceRouter = router({
         userId: ctx.user.id,
         fetchMs: afterFetch - start,
         totalMs: afterNoFilter - start,
-        resultCount: mapped.length,
+        resultCount: resources.length,
       });
-      return mapped;
+      return resources;
     }),
 
   get: protectedProcedure

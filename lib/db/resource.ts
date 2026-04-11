@@ -5,37 +5,32 @@ import { Prisma, type CaptureSourceType } from "@/generated/prisma/client";
 
 export async function createResource(args: {
   userId: string;
-  type: string;
   sourceType?: CaptureSourceType;
-  sourceUrl?: string | null;
-  canonicalUrl?: string | null;
+  canonicalUrl: string;
   sourceFingerprint?: string | null;
   title: string;
-  externalId?: string | null;
-  content: unknown;
+  thumbnailUrl?: string | null;
+  metadata?: unknown;
 }) {
   return prisma.resource.create({
     data: {
       userId: args.userId,
-      type: args.type,
       sourceType: args.sourceType ?? "bilibili",
-      sourceUrl: args.sourceUrl ?? null,
-      canonicalUrl: args.canonicalUrl ?? null,
+      canonicalUrl: args.canonicalUrl,
       sourceFingerprint: args.sourceFingerprint ?? null,
       title: args.title,
-      externalId: args.externalId ?? null,
-      content: args.content as unknown as Prisma.InputJsonValue,
+      thumbnailUrl: args.thumbnailUrl ?? null,
+      metadata: (args.metadata ?? null) as unknown as Prisma.InputJsonValue,
     },
     select: {
       id: true,
       userId: true,
-      type: true,
       sourceType: true,
-      sourceUrl: true,
       canonicalUrl: true,
       sourceFingerprint: true,
       title: true,
-      externalId: true,
+      thumbnailUrl: true,
+      metadata: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -43,48 +38,72 @@ export async function createResource(args: {
 }
 
 export async function getUserResources(userId: string) {
-  return prisma.resource.findMany({
+  const resources = await prisma.resource.findMany({
     where: { userId },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
       userId: true,
-      type: true,
+      canonicalUrl: true,
       sourceType: true,
-      sourceUrl: true,
+      sourceFingerprint: true,
       title: true,
-      externalId: true,
+      thumbnailUrl: true,
+      metadata: true,
       createdAt: true,
       updatedAt: true,
       captureJobs: {
         where: { superseded: false },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
         select: {
           id: true,
+          resourceId: true,
+          sourceType: true,
+          jobType: true,
+          executionMode: true,
+          captureRequestId: true,
           status: true,
           stage: true,
+          attempt: true,
+          maxAttempts: true,
           errorCode: true,
           errorMessage: true,
+          superseded: true,
+          supersededByJobId: true,
+          startedAt: true,
+          finishedAt: true,
           createdAt: true,
           updatedAt: true,
-        },
-      },
-      artifacts: {
-        where: { isPrimary: true },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
-        select: {
-          id: true,
-          kind: true,
-          language: true,
-          format: true,
-          qualityScore: true,
-          content: true,
-          createdAt: true,
+          artifacts: {
+            where: { isPrimary: true },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 1,
+            select: {
+              id: true,
+              jobId: true,
+              kind: true,
+              language: true,
+              format: true,
+              schemaVersion: true,
+              isPrimary: true,
+              qualityScore: true,
+              content: true,
+              createdAt: true,
+            },
+          },
         },
       },
     },
+  });
+
+  return resources.map((resource) => {
+    const activeJob = resource.captureJobs[0] ?? null;
+    const primaryArtifact = activeJob?.artifacts[0] ?? null;
+    return {
+      ...resource,
+      activeJob,
+      primaryArtifact,
+    };
   });
 }
 
@@ -114,51 +133,71 @@ export async function getResourceWithAccessCheck(
 }
 
 export async function getResourceForUser(args: { userId: string; id: string }) {
-  return prisma.resource.findFirst({
+  const resource = await prisma.resource.findFirst({
     where: { id: args.id, userId: args.userId },
     select: {
       id: true,
       userId: true,
-      type: true,
-      sourceType: true,
-      sourceUrl: true,
       canonicalUrl: true,
+      sourceType: true,
       sourceFingerprint: true,
       title: true,
-      externalId: true,
-      content: true,
+      thumbnailUrl: true,
+      metadata: true,
       createdAt: true,
       updatedAt: true,
       captureJobs: {
         where: { superseded: false },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
         select: {
           id: true,
+          resourceId: true,
+          sourceType: true,
+          jobType: true,
+          executionMode: true,
+          captureRequestId: true,
           status: true,
           stage: true,
+          attempt: true,
+          maxAttempts: true,
           errorCode: true,
           errorMessage: true,
+          superseded: true,
+          supersededByJobId: true,
+          startedAt: true,
+          finishedAt: true,
           createdAt: true,
           updatedAt: true,
-        },
-      },
-      artifacts: {
-        where: { isPrimary: true },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
-        select: {
-          id: true,
-          kind: true,
-          language: true,
-          format: true,
-          qualityScore: true,
-          content: true,
-          createdAt: true,
+          artifacts: {
+            where: { isPrimary: true },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 1,
+            select: {
+              id: true,
+              jobId: true,
+              kind: true,
+              language: true,
+              format: true,
+              schemaVersion: true,
+              isPrimary: true,
+              qualityScore: true,
+              content: true,
+              createdAt: true,
+            },
+          },
         },
       },
     },
   });
+
+  if (!resource) return null;
+  const activeJob = resource.captureJobs[0] ?? null;
+  const primaryArtifact = activeJob?.artifacts[0] ?? null;
+  return {
+    ...resource,
+    activeJob,
+    primaryArtifact,
+  };
 }
 
 export async function getResourceMetaForUser(args: { userId: string; id: string }) {

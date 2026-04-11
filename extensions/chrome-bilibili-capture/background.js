@@ -225,7 +225,10 @@ async function uploadCapture(baseUrl, token, payload) {
       typeof payload?.metadata?.title === "string" && payload.metadata.title.trim()
         ? `B站：${payload.metadata.title.trim()}`.slice(0, 80)
         : "B站采集",
-    externalId: sourceId || undefined,
+    thumbnailUrl:
+      typeof payload?.metadata?.cover === "string" && payload.metadata.cover.trim()
+        ? payload.metadata.cover.trim()
+        : undefined,
     artifact: artifact || undefined,
   };
 

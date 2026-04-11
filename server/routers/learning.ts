@@ -27,11 +27,13 @@ import {
 import { logError } from "@/lib/logger";
 
 function getLearningContentFromResource(resource: {
-  content: unknown;
-  artifacts?: Array<{ kind: string; language: string | null; content: unknown }>;
+  metadata: unknown;
+  captureJobs?: Array<{
+    artifacts?: Array<{ kind: string; language: string | null; content: unknown }>;
+  }>;
 }) {
-  const primaryArtifact = resource.artifacts?.[0];
-  if (!primaryArtifact) return resource.content;
+  const primaryArtifact = resource.captureJobs?.[0]?.artifacts?.[0];
+  if (!primaryArtifact) return resource.metadata;
 
   if (
     primaryArtifact.kind === "official_subtitle" ||
@@ -63,7 +65,7 @@ function getLearningContentFromResource(resource: {
     };
   }
 
-  return resource.content;
+  return resource.metadata;
 }
 
 /**
@@ -185,7 +187,7 @@ export const learningRouter = router({
       const promptInput = getResourcesContextText(
         resources.map((resource) => ({
           title: resource.title,
-          type: resource.type,
+          sourceType: resource.sourceType,
           content: getLearningContentFromResource(resource),
         }))
       );
@@ -303,7 +305,7 @@ export const learningRouter = router({
       const contextText = getResourcesContextText(
         resources.map((resource) => ({
           title: resource.title,
-          type: resource.type,
+          sourceType: resource.sourceType,
           content: getLearningContentFromResource(resource),
         }))
       );

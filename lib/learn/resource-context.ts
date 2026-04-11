@@ -54,7 +54,7 @@ const MAX_SUMMARY_CHARS = 20000;
 
 export type ResourceContext = {
   title: string;
-  type: string;
+  sourceType: string;
   summaryText?: string;
   chapters?: string[];
   transcriptSnippet?: string[];
@@ -80,7 +80,7 @@ function formatTranscriptLine(line: z.infer<typeof cueSchema>) {
 
 function buildResourceContext(resource: {
   title: string;
-  type: string;
+  sourceType: string;
   content: unknown;
 }): ResourceContext {
   const parsed = resourceContentSchema.safeParse(resource.content);
@@ -116,7 +116,7 @@ function buildResourceContext(resource: {
 
   return {
     title: resource.title.trim(),
-    type: resource.type,
+    sourceType: resource.sourceType,
     summaryText,
     chapters,
     transcriptSnippet,
@@ -140,7 +140,7 @@ function buildResourceContext(resource: {
 // [00:25] 我们先来看 useState……
 // （已截取前 2 行，共 120 行）
 function formatResourceContext(context: ResourceContext) {
-  const lines = [`素材标题：${context.title}`, `素材类型：${context.type}`];
+  const lines = [`素材标题：${context.title}`, `素材类型：${context.sourceType}`];
 
   if (context.summaryText) {
     lines.push("", "摘要：", context.summaryText);
@@ -182,7 +182,7 @@ function formatResourcesContext(contexts: ResourceContext[]) {
 
 export function getResourceContextText(resource: {
   title: string;
-  type: string;
+  sourceType: string;
   content: unknown;
 }) {
   const context = buildResourceContext(resource);
@@ -190,7 +190,7 @@ export function getResourceContextText(resource: {
 }
 
 export function getResourcesContextText(
-  resources: Array<{ title: string; type: string; content: unknown }>
+  resources: Array<{ title: string; sourceType: string; content: unknown }>
 ) {
   const contexts = resources.map((resource) => buildResourceContext(resource));
   return formatResourcesContext(contexts);

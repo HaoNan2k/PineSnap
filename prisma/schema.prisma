@@ -25,7 +25,6 @@ model Conversation {
 model Message {
   id              String       @id @default(uuid(7))
   conversationId  String
-  content         String
   parentMessageId String?
   createdAt       DateTime     @default(now())
   role            Role         @default(user)
@@ -67,31 +66,26 @@ model CaptureAuthCode {
 }
 
 model Resource {
-  id         String   @id @default(uuid(7))
+  id         String            @id @default(uuid(7))
   userId     String
-  type       String
   sourceType CaptureSourceType @default(bilibili)
-  sourceUrl  String?
-  canonicalUrl String?
+  canonicalUrl String
   sourceFingerprint String?
   title      String
-  externalId String?
-  content    Json
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  thumbnailUrl String?
+  metadata   Json?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
   learnings  LearningResource[]
   captureJobs CaptureJob[]
-  artifacts  CaptureArtifact[]
 
   @@index([userId])
-  @@index([type, externalId])
   @@index([userId, sourceType])
   @@index([userId, sourceFingerprint])
 }
 
 model CaptureJob {
   id               String           @id @default(uuid(7))
-  userId           String
   resourceId       String
   sourceType       CaptureSourceType
   jobType          CaptureJobType
@@ -112,30 +106,29 @@ model CaptureJob {
   updatedAt        DateTime         @updatedAt
   resource         Resource         @relation(fields: [resourceId], references: [id])
   artifacts        CaptureArtifact[]
+  supersededByJob  CaptureJob?      @relation("CaptureJobSupersede", fields: [supersededByJobId], references: [id], onDelete: SetNull)
+  supersededJobs   CaptureJob[]     @relation("CaptureJobSupersede")
 
-  @@index([userId])
   @@index([resourceId, createdAt])
   @@index([resourceId, superseded, createdAt])
-  @@unique([userId, sourceType, captureRequestId])
+  @@unique([resourceId, captureRequestId])
 }
 
 model CaptureArtifact {
   id           String              @id @default(uuid(7))
-  resourceId   String
   jobId        String
   kind         CaptureArtifactKind
   language     String?
   format       CaptureArtifactFormat?
+  schemaVersion Int                @default(1)
   isPrimary    Boolean             @default(false)
   qualityScore Float?
   content      Json
   createdAt    DateTime            @default(now())
-  resource     Resource            @relation(fields: [resourceId], references: [id])
   job          CaptureJob          @relation(fields: [jobId], references: [id])
 
-  @@index([resourceId, createdAt])
   @@index([jobId, createdAt])
-  @@index([resourceId, kind, language, isPrimary])
+  @@index([jobId, kind, language, isPrimary])
 }
 
 model Learning {
@@ -183,6 +176,7 @@ enum CaptureSourceType {
   web_page
   youtube
   xiaohongshu
+  douyin
 }
 
 enum CaptureJobStatus {

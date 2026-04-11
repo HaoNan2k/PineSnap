@@ -80,7 +80,6 @@ export async function POST(
 
     if (body.data.status === "SUCCEEDED" && body.data.artifact) {
       await createCaptureArtifact({
-        resourceId: job.resourceId,
         jobId: job.id,
         kind: body.data.artifact.kind,
         language: body.data.artifact.language ?? null,

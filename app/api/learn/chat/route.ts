@@ -150,8 +150,10 @@ export async function POST(req: Request) {
     const contextText = getResourcesContextText(
       resources.map((resource) => ({
         title: resource.title,
-        type: resource.type,
-        content: resource.content,
+        sourceType: resource.sourceType,
+        content:
+          resource.captureJobs[0]?.artifacts[0]?.content ??
+          resource.metadata,
       }))
     );
 

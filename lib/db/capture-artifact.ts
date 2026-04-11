@@ -8,11 +8,11 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export async function createCaptureArtifact(args: {
-  resourceId: string;
   jobId: string;
   kind: CaptureArtifactKind;
   language?: string | null;
   format?: CaptureArtifactFormat | null;
+  schemaVersion?: number;
   qualityScore?: number | null;
   content: unknown;
   isPrimary?: boolean;
@@ -20,10 +20,17 @@ export async function createCaptureArtifact(args: {
   const content = args.content as Prisma.InputJsonValue;
 
   return prisma.$transaction(async (tx) => {
+    const job = await tx.captureJob.findUniqueOrThrow({
+      where: { id: args.jobId },
+      select: { resourceId: true },
+    });
+
     if (args.isPrimary) {
       await tx.captureArtifact.updateMany({
         where: {
-          resourceId: args.resourceId,
+          job: {
+            resourceId: job.resourceId,
+          },
           kind: args.kind,
           language: args.language ?? null,
           isPrimary: true,
@@ -36,22 +43,22 @@ export async function createCaptureArtifact(args: {
 
     const created = await tx.captureArtifact.create({
       data: {
-        resourceId: args.resourceId,
         jobId: args.jobId,
         kind: args.kind,
         language: args.language ?? null,
         format: args.format ?? null,
+        schemaVersion: args.schemaVersion ?? 1,
         qualityScore: args.qualityScore ?? null,
         content,
         isPrimary: args.isPrimary ?? false,
       },
       select: {
         id: true,
-        resourceId: true,
         jobId: true,
         kind: true,
         language: true,
         format: true,
+        schemaVersion: true,
         isPrimary: true,
         qualityScore: true,
         createdAt: true,
@@ -68,18 +75,20 @@ export async function getPrimaryArtifactForResource(args: {
 }) {
   return prisma.captureArtifact.findFirst({
     where: {
-      resourceId: args.resourceId,
+      job: {
+        resourceId: args.resourceId,
+      },
       kind: args.kind,
       isPrimary: true,
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
-      resourceId: true,
       jobId: true,
       kind: true,
       language: true,
       format: true,
+      schemaVersion: true,
       isPrimary: true,
       qualityScore: true,
       content: true,

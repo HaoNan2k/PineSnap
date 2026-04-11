@@ -7,6 +7,7 @@ export const captureSourceTypeSchema = z.enum([
   "web_page",
   "youtube",
   "xiaohongshu",
+  "douyin",
 ]);
 
 export const captureJobTypeSchema = z.enum([
@@ -73,6 +74,13 @@ const xiaohongshuProviderContextSchema = z
   })
   .optional();
 
+const douyinProviderContextSchema = z
+  .object({
+    awemeId: z.string().min(1).optional(),
+    secUid: z.string().min(1).optional(),
+  })
+  .optional();
+
 export const captureContextSchema = z.object({
   schemaVersion: z.number().int().positive().default(1),
   sourceType: captureSourceTypeSchema,
@@ -89,6 +97,7 @@ export const captureContextSchema = z.object({
       wechatArticle: wechatArticleProviderContextSchema,
       webPage: webPageProviderContextSchema,
       xiaohongshu: xiaohongshuProviderContextSchema,
+      douyin: douyinProviderContextSchema,
     })
     .optional(),
 });
@@ -116,12 +125,10 @@ export function requiredCaptureScope(sourceType: CaptureSourceType): `capture:${
   return `capture:${sourceType}`;
 }
 
-export function inferResourceType(sourceType: CaptureSourceType): string {
-  return `${sourceType}_capture`;
-}
-
 export function inferJobTypeFromSource(sourceType: CaptureSourceType): CaptureJobType {
-  if (sourceType === "bilibili" || sourceType === "youtube") return "subtitle_fetch";
+  if (sourceType === "bilibili" || sourceType === "youtube" || sourceType === "douyin") {
+    return "audio_transcribe";
+  }
   if (sourceType === "wechat_article") return "article_extract";
   if (sourceType === "web_page") return "web_extract";
   if (sourceType === "xiaohongshu") return "media_ingest";
