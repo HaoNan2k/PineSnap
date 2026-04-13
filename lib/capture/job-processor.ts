@@ -139,7 +139,7 @@ export type ProcessedAsrJob = {
       originalDurationSec: number | null;
       processedDurationSec: number;
       trimRangeMs: [number, number];
-      source: "media_candidate" | "yt_dlp";
+      source: "media_candidate" | "bilibili_api" | "yt_dlp";
       sourceUrl: string;
       contentType: string | null;
       languageConfidence: number | null;
@@ -163,6 +163,8 @@ export async function processAudioTranscribeJob(args: {
   const downloaded = await resolveAudioForAsr({
     sourceUrl: captureContext.sourceUrl,
     userAgent: captureContext.accessContext?.userAgent,
+    referer: captureContext.accessContext?.referer,
+    bvid: captureContext.providerContext?.bilibili?.bvid,
     candidates: audioCandidates,
   });
 

@@ -181,40 +181,45 @@ export async function requeueCaptureJob(args: {
 export async function claimPendingCaptureJobs(args: {
   limit: number;
   sourceType?: CaptureSourceType;
+  jobType?: CaptureJobType;
 }) {
   const limit = Math.max(1, Math.min(args.limit, 50));
   const now = new Date();
   return prisma.$transaction(async (tx) => {
-    const candidates = await tx.captureJob.findMany({
+    const sourceTypeFilter = args.sourceType
+      ? Prisma.sql`AND "sourceType" = ${args.sourceType}::"CaptureSourceType"`
+      : Prisma.empty;
+    const jobTypeFilter = args.jobType
+      ? Prisma.sql`AND "jobType" = ${args.jobType}::"CaptureJobType"`
+      : Prisma.empty;
+
+    const lockedRows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id"
+      FROM "CaptureJob"
+      WHERE "status" = 'PENDING'::"CaptureJobStatus"
+        AND "superseded" = false
+        ${sourceTypeFilter}
+        ${jobTypeFilter}
+      ORDER BY "createdAt" ASC, "id" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${limit}
+    `);
+
+    if (lockedRows.length === 0) return [];
+
+    const claimedIds = lockedRows.map((row) => row.id);
+
+    await tx.captureJob.updateMany({
       where: {
+        id: { in: claimedIds },
         status: "PENDING",
-        sourceType: args.sourceType,
       },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: limit,
-      select: {
-        id: true,
+      data: {
+        status: "RUNNING",
+        stage: "CLAIMED",
+        startedAt: now,
       },
     });
-
-    if (candidates.length === 0) return [];
-
-    const claimedIds: string[] = [];
-    for (const candidate of candidates) {
-      const updated = await tx.captureJob.updateMany({
-        where: { id: candidate.id, status: "PENDING" },
-        data: {
-          status: "RUNNING",
-          stage: "CLAIMED",
-          startedAt: now,
-        },
-      });
-      if (updated.count === 1) {
-        claimedIds.push(candidate.id);
-      }
-    }
-
-    if (claimedIds.length === 0) return [];
 
     return tx.captureJob.findMany({
       where: { id: { in: claimedIds } },

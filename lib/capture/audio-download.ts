@@ -9,7 +9,7 @@ type AudioCandidate = {
 
 export type DownloadedAudio = {
   bytes: Uint8Array;
-  source: "media_candidate" | "yt_dlp";
+  source: "media_candidate" | "bilibili_api" | "yt_dlp";
   sourceUrl: string;
   contentType: string | null;
   originalDurationSec: number | null;
@@ -118,14 +118,45 @@ async function runYtDlp(args: string[]): Promise<string> {
   });
 }
 
-async function fetchAudioBytes(url: string): Promise<{ bytes: Uint8Array; contentType: string | null }> {
+function buildMediaFetchHeaders(
+  url: string,
+  opts?: { referer?: string; userAgent?: string }
+): Record<string, string> | undefined {
+  let referer = opts?.referer?.trim();
+  const userAgent = opts?.userAgent?.trim();
+  let hostname = "";
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  const bilibiliCdn =
+    hostname.includes("bilivideo.com") ||
+    hostname.endsWith(".bilibili.com") ||
+    hostname === "bilibili.com" ||
+    hostname.includes("hdslb.com");
+  if (bilibiliCdn && !referer) {
+    referer = "https://www.bilibili.com/";
+  }
+  const headers: Record<string, string> = {};
+  if (referer) headers.referer = referer;
+  if (userAgent) headers["user-agent"] = userAgent;
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+async function fetchAudioBytes(
+  url: string,
+  headerOpts?: { referer?: string; userAgent?: string }
+): Promise<{ bytes: Uint8Array; contentType: string | null }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), getDownloadTimeoutMs());
   const maxBytes = getDownloadMaxBytes();
+  const headers = buildMediaFetchHeaders(url, headerOpts);
 
   try {
     const response = await fetch(url, {
       signal: controller.signal,
+      ...(headers ? { headers } : {}),
     });
     if (!response.ok || !response.body) {
       throw new Error(`audio download failed with status ${response.status}`);
@@ -195,15 +226,87 @@ async function resolveYtDlpAudioSource(args: {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Bilibili public API audio resolution
+// ---------------------------------------------------------------------------
+
+type BilibiliViewResponse = {
+  code: number;
+  data?: { pages?: Array<{ cid?: number; duration?: number }> };
+};
+
+type BilibiliPlayUrlResponse = {
+  code: number;
+  data?: {
+    dash?: {
+      audio?: Array<{ baseUrl?: string; base_url?: string; bandwidth?: number }>;
+    };
+  };
+};
+
+function extractBvidFromUrl(sourceUrl: string): string | null {
+  const match = sourceUrl.match(/\/(BV[\w]+)/i);
+  return match?.[1] ?? null;
+}
+
+async function resolveBilibiliApiAudio(args: {
+  sourceUrl: string;
+  bvid?: string;
+}): Promise<{ audioUrl: string; durationSec: number | null } | null> {
+  const bvid = args.bvid || extractBvidFromUrl(args.sourceUrl);
+  if (!bvid) return null;
+
+  try {
+    const viewRes = await fetch(
+      `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`,
+      { signal: AbortSignal.timeout(15_000) }
+    );
+    if (!viewRes.ok) return null;
+    const viewJson = (await viewRes.json()) as BilibiliViewResponse;
+    const firstPage = viewJson.data?.pages?.[0];
+    const cid = firstPage?.cid;
+    if (!cid) return null;
+
+    const playRes = await fetch(
+      `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}&fnval=16`,
+      { signal: AbortSignal.timeout(15_000) }
+    );
+    if (!playRes.ok) return null;
+    const playJson = (await playRes.json()) as BilibiliPlayUrlResponse;
+    const audioStreams = playJson.data?.dash?.audio;
+    if (!audioStreams || audioStreams.length === 0) return null;
+
+    const audioUrl = audioStreams[0].baseUrl ?? audioStreams[0].base_url;
+    if (!audioUrl) return null;
+
+    return {
+      audioUrl,
+      durationSec:
+        typeof firstPage?.duration === "number" && firstPage.duration > 0
+          ? firstPage.duration
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main entry: candidates → Bilibili API → yt-dlp
+// ---------------------------------------------------------------------------
+
 export async function resolveAudioForAsr(args: {
   sourceUrl: string;
   userAgent?: string;
+  referer?: string;
+  bvid?: string;
   candidates?: AudioCandidate[];
 }): Promise<DownloadedAudio> {
+  const headerOpts = { referer: args.referer, userAgent: args.userAgent };
   const candidates = (args.candidates ?? []).filter((item) => typeof item.url === "string");
   for (const candidate of candidates) {
     try {
-      const downloaded = await fetchAudioBytes(candidate.url);
+      const downloaded = await fetchAudioBytes(candidate.url, headerOpts);
       return {
         bytes: downloaded.bytes,
         source: "media_candidate",
@@ -215,7 +318,30 @@ export async function resolveAudioForAsr(args: {
             : null,
       };
     } catch {
-      // Try next candidate or yt-dlp fallback.
+      // Try next candidate or fallback.
+    }
+  }
+
+  // Bilibili public API fallback
+  const biliApi = await resolveBilibiliApiAudio({
+    sourceUrl: args.sourceUrl,
+    bvid: args.bvid,
+  });
+  if (biliApi) {
+    try {
+      const downloaded = await fetchAudioBytes(biliApi.audioUrl, {
+        referer: "https://www.bilibili.com/",
+        userAgent: args.userAgent,
+      });
+      return {
+        bytes: downloaded.bytes,
+        source: "bilibili_api",
+        sourceUrl: biliApi.audioUrl,
+        contentType: downloaded.contentType,
+        originalDurationSec: biliApi.durationSec,
+      };
+    } catch {
+      // Fall through to yt-dlp.
     }
   }
 
@@ -223,7 +349,7 @@ export async function resolveAudioForAsr(args: {
     sourceUrl: args.sourceUrl,
     userAgent: args.userAgent,
   });
-  const downloaded = await fetchAudioBytes(fallback.audioUrl);
+  const downloaded = await fetchAudioBytes(fallback.audioUrl, headerOpts);
   return {
     bytes: downloaded.bytes,
     source: "yt_dlp",
