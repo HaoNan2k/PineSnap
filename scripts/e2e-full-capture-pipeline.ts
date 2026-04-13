@@ -291,8 +291,10 @@ async function main() {
     process.exit(1);
   }
 
-  const content = primary.content as { text?: string; metadata?: { source?: string } };
-  console.log("[e2e] artifact text preview:", (content.text ?? "").slice(0, 160));
+  const content = primary.content as { lines?: Array<{ text: string }>; metadata?: { source?: string } };
+  const firstLine = content.lines?.[0]?.text ?? "(no lines)";
+  console.log("[e2e] artifact first line:", firstLine);
+  console.log("[e2e] artifact line count:", content.lines?.length ?? 0);
   console.log("[e2e] artifact metadata.source:", content.metadata?.source);
 
   const deleted = await prisma.captureToken.deleteMany({

@@ -208,6 +208,15 @@ async function uploadCapture(baseUrl, token, payload) {
     };
   }
 
+  // mediaCandidates 和 accessContext 由 content.js 在字幕失败 fallback 时提供
+  const mediaCandidates = Array.isArray(payload?.mediaCandidates)
+    ? payload.mediaCandidates
+    : undefined;
+  const accessContext =
+    payload?.accessContext && typeof payload.accessContext === "object"
+      ? payload.accessContext
+      : undefined;
+
   const requestBody = {
     captureContext: {
       schemaVersion: 1,
@@ -215,12 +224,15 @@ async function uploadCapture(baseUrl, token, payload) {
       sourceUrl,
       captureRequestId,
       capturedAt: new Date().toISOString(),
+      accessContext,
+      mediaCandidates,
       providerContext: {
         bilibili: {
           bvid: sourceId || undefined,
         },
       },
     },
+    jobType: artifact ? undefined : "audio_transcribe",
     title:
       typeof payload?.metadata?.title === "string" && payload.metadata.title.trim()
         ? `B站：${payload.metadata.title.trim()}`.slice(0, 80)

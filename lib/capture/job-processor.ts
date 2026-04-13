@@ -128,7 +128,6 @@ export type ProcessedAsrJob = {
     provider: string;
     language?: string;
     lines: CapturedLine[];
-    text: string;
     metadata: {
       providerRequestId: string;
       modelRequested: string[];
@@ -180,7 +179,7 @@ export async function processAudioTranscribeJob(args: {
     words: transcript.words ?? null,
   });
 
-  if (lines.length === 0 && !transcript.text?.trim()) {
+  if (lines.length === 0) {
     throw new Error("ASR transcript returned empty content");
   }
 
@@ -204,7 +203,6 @@ export async function processAudioTranscribeJob(args: {
       provider: "assemblyai",
       language: transcript.language_code ?? undefined,
       lines,
-      text: transcript.text?.trim() || lines.map((line) => line.text).join("\n"),
       metadata: {
         providerRequestId: transcriptId,
         modelRequested: transcript.speech_models ?? ["universal-2"],
