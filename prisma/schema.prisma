@@ -70,15 +70,72 @@ model Resource {
   id         String   @id @default(uuid(7))
   userId     String
   type       String
+  sourceType CaptureSourceType @default(bilibili)
+  sourceUrl  String?
+  canonicalUrl String?
+  sourceFingerprint String?
   title      String
   externalId String?
   content    Json
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   learnings  LearningResource[]
+  captureJobs CaptureJob[]
+  artifacts  CaptureArtifact[]
 
   @@index([userId])
   @@index([type, externalId])
+  @@index([userId, sourceType])
+  @@index([userId, sourceFingerprint])
+}
+
+model CaptureJob {
+  id               String           @id @default(uuid(7))
+  userId           String
+  resourceId       String
+  sourceType       CaptureSourceType
+  jobType          CaptureJobType
+  executionMode    CaptureExecutionMode @default(ASYNC)
+  captureRequestId String
+  status           CaptureJobStatus @default(PENDING)
+  stage            CaptureJobStage?
+  inputContext     Json
+  attempt          Int              @default(0)
+  maxAttempts      Int              @default(3)
+  errorCode        String?
+  errorMessage     String?
+  superseded       Boolean          @default(false)
+  supersededByJobId String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  resource         Resource         @relation(fields: [resourceId], references: [id])
+  artifacts        CaptureArtifact[]
+
+  @@index([userId])
+  @@index([resourceId, createdAt])
+  @@index([resourceId, superseded, createdAt])
+  @@unique([userId, sourceType, captureRequestId])
+}
+
+model CaptureArtifact {
+  id           String              @id @default(uuid(7))
+  resourceId   String
+  jobId        String
+  kind         CaptureArtifactKind
+  language     String?
+  format       CaptureArtifactFormat?
+  isPrimary    Boolean             @default(false)
+  qualityScore Float?
+  content      Json
+  createdAt    DateTime            @default(now())
+  resource     Resource            @relation(fields: [resourceId], references: [id])
+  job          CaptureJob          @relation(fields: [jobId], references: [id])
+
+  @@index([resourceId, createdAt])
+  @@index([jobId, createdAt])
+  @@index([resourceId, kind, language, isPrimary])
 }
 
 model Learning {
@@ -118,4 +175,58 @@ enum Role {
   assistant
   system
   tool
+}
+
+enum CaptureSourceType {
+  bilibili
+  wechat_article
+  web_page
+  youtube
+  xiaohongshu
+}
+
+enum CaptureJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum CaptureArtifactKind {
+  official_subtitle
+  asr_transcript
+  summary
+  extracted_text
+}
+
+enum CaptureArtifactFormat {
+  cue_lines
+  json
+  plain_text
+  markdown
+  binary_ref
+}
+
+enum CaptureJobType {
+  subtitle_fetch
+  audio_transcribe
+  web_extract
+  article_extract
+  summary_generate
+  media_ingest
+}
+
+enum CaptureExecutionMode {
+  INLINE
+  ASYNC
+}
+
+enum CaptureJobStage {
+  QUEUED
+  CLAIMED
+  PERSISTING_ARTIFACT
+  COMPLETED
+  FAILED
+  CANCELLED
 }

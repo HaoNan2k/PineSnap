@@ -2,7 +2,7 @@
 
 本文面向项目内开发者，说明 PineSnap 的「浏览器扩展采集」鉴权机制：核心名词、数据模型、端到端时序、API 契约与常见排障路径。
 
-> 适用范围：`/api/capture/extension/*`（authorize / exchange）与 `POST /api/capture/bilibili`。  
+> 适用范围：`/api/capture/extension/*`（authorize / exchange）与 `POST /api/capture/jobs`。  
 > 长期真相文档（数据模型语义）：`docs/capture-auth-data-model.md`。
 
 ---
@@ -35,7 +35,7 @@
 
 ### `CaptureToken` / `token`（可重复使用的 Bearer token）
 
-- **用途**：扩展调用采集 API（例如 `POST /api/capture/bilibili`）时携带的运行时凭证。
+- **用途**：扩展调用采集 API（默认 `POST /api/capture/jobs`）时携带的运行时凭证。
 - **特点**：
   - 可撤销（`revokedAt`）
   - 可审计（`lastUsedAt`）
@@ -116,10 +116,10 @@ sequenceDiagram
 
   Note over E: ⑭ 扩展把 token 存到本地 storage\n后续采集都用它
 
-  E->>S: ⑮ POST /api/capture/bilibili\nAuthorization: Bearer token\npayload(字幕/摘要等)
+  E->>S: ⑮ POST /api/capture/jobs\nAuthorization: Bearer token\ncaptureContext + artifact
   S->>DB: ⑯ verifyCaptureToken(tokenHash)\n检查 revokedAt + scopes\n并更新 lastUsedAt
   S->>DB: ⑰ create Resource(userId=token所属用户, content=payload)
-  S-->>E: ⑱ 返回 { ok: true, resourceId }
+  S-->>E: ⑱ 返回 { ok: true, resourceId, jobId, status, idempotent }
 ```
 
 ---
@@ -170,7 +170,7 @@ sequenceDiagram
 - 对同一个 `userId`、同一个 `label`、并包含 `capture:bilibili` scope 的旧 token 做撤销，再签发新 token。
 - 这使得“同一扩展来源”的 token 可以保持单活跃，减少泄漏面（但也意味着重连会让旧 token 立即失效）。
 
-### 3) `POST /api/capture/bilibili`
+### 3) `POST /api/capture/jobs`
 
 **用途**：扩展上传采集结果（payload），服务端鉴权后写入 `Resource`。
 
@@ -184,7 +184,7 @@ sequenceDiagram
 - 缺少/无效 token：`401 { error: "Unauthorized" }`
 - scope 不足：`403 { error: "Forbidden" }`
 - 请求体不合法：`400 { error: "Invalid request body", details: ... }`
-- 成功：`200 { ok: true, resourceId: string }`
+- 成功：`200 { ok: true, resourceId: string, jobId: string, status: string, idempotent: boolean }`
 
 ---
 
@@ -260,7 +260,7 @@ sequenceDiagram
 - `CaptureToken` 签发/校验/撤销：`lib/db/capture-token.ts`
 - 授权码签发路由：`app/api/capture/extension/authorize/route.ts`
 - token 兑换路由：`app/api/capture/extension/exchange/route.ts`
-- 采集入库路由：`app/api/capture/bilibili/route.ts`
+- 采集入库路由：`app/api/capture/jobs/route.ts`
 - 长期真相文档（数据模型语义）：`docs/capture-auth-data-model.md`
 - 扩展联调/发布前验证：`docs/chrome-extension-bilibili-capture.md`
 

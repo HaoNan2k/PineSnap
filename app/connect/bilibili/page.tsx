@@ -15,12 +15,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 const CHROME_EXTENSION_LABEL = "Bilibili 扩展";
-const LEGACY_EXTENSION_LABEL_PREFIX = "ChromeExtension:";
-const LEGACY_USERSCRIPT_LABEL = "Bilibili 连接";
 const CHROME_EXTENSION_STORE_URL =
   process.env.NEXT_PUBLIC_CHROME_EXTENSION_STORE_URL?.trim() || null;
-const LEGACY_USERSCRIPT_ENABLED =
-  process.env.CAPTURE_ENABLE_USERSCRIPT_LEGACY === "true";
 
 export default async function Page() {
   const ctx = await createContext();
@@ -38,11 +34,7 @@ export default async function Page() {
       userId,
       revokedAt: null,
       scopes: { has: "capture:bilibili" },
-      OR: [
-        { label: CHROME_EXTENSION_LABEL },
-        { label: LEGACY_USERSCRIPT_LABEL },
-        { label: { startsWith: LEGACY_EXTENSION_LABEL_PREFIX } },
-      ],
+      label: CHROME_EXTENSION_LABEL,
     },
   });
 
@@ -55,22 +47,6 @@ export default async function Page() {
       userId,
       scope: "capture:bilibili",
       label: CHROME_EXTENSION_LABEL,
-    });
-    await revokeCaptureTokensByScopeAndLabel({
-      userId,
-      scope: "capture:bilibili",
-      label: LEGACY_USERSCRIPT_LABEL,
-    });
-    await prisma.captureToken.updateMany({
-      where: {
-        userId,
-        revokedAt: null,
-        scopes: { has: "capture:bilibili" },
-        label: { startsWith: LEGACY_EXTENSION_LABEL_PREFIX },
-      },
-      data: {
-        revokedAt: new Date(),
-      },
     });
     revalidatePath("/connect/bilibili");
   }
@@ -202,16 +178,6 @@ export default async function Page() {
                 </Button>
               </form>
 
-              {LEGACY_USERSCRIPT_ENABLED ? (
-                <div className="pt-4 border-t">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Legacy 回滚入口（临时）：仅用于历史兼容排障。
-                  </p>
-                  <Button asChild variant="outline" className="w-full h-10 rounded-xl">
-                    <a href="/connect/bilibili/install.user.js">打开旧版 userscript 连接</a>
-                  </Button>
-                </div>
-              ) : null}
             </div>
           </div>
         </div>

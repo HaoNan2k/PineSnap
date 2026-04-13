@@ -5,8 +5,10 @@
   const PROVIDER = "bilibili_full_subtitle_v1";
   const CID_SOURCE_EMBEDDED = "embedded";
   const CID_SOURCE_PAGELIST_API = "pagelist_api";
+  const MAX_TRACK_API_ATTEMPTS = 3;
+  const TRACK_API_BACKOFF_MS = [250, 700];
 
-  function pickSubtitleTracks(video, apiResult) {
+  function pickSubtitleCandidates(video, apiResult) {
     const candidates = [
       video.playinfo?.data?.subtitle?.subtitles,
       video.playinfo?.subtitle?.subtitles,
@@ -21,7 +23,6 @@
       const tracks = value
         .map((item) => {
           const url = item?.subtitle_url || item?.subtitleUrl || item?.url;
-          if (!url) return null;
           return {
             id: item.id ?? item.subtitle_id ?? null,
             language: item.lan_doc || item.lang || item.lan || undefined,
@@ -37,8 +38,28 @@
   }
 
   function normalizeTrackUrl(url) {
+    if (typeof url !== "string" || url.length === 0) return "";
     if (url.startsWith("//")) return `https:${url}`;
     return url;
+  }
+
+  function buildTrackKey(track) {
+    if (!track) return null;
+    const id = track.id == null ? "na" : String(track.id);
+    const language = String(track.languageCode || track.language || "na");
+    return `${id}|${language}`;
+  }
+
+  function normalizeTrackSample(track, attempt, trackCount) {
+    const trackKey = buildTrackKey(track);
+    return {
+      attempt,
+      selectedTrackId: track?.id ?? null,
+      selectedLanguage: track?.languageCode || track?.language || null,
+      hasUrl: Boolean(track?.url),
+      trackCount,
+      trackKey,
+    };
   }
 
   function chooseTrack(tracks) {
@@ -62,6 +83,98 @@
     if (aid) params.set("aid", String(aid));
 
     return ctx.fetchJson(`https://api.bilibili.com/x/player/v2?${params.toString()}`);
+  }
+
+  async function resolveStableTrackViaApi(ctx, identity) {
+    let loginRequired = false;
+    let loginMid = null;
+
+    const samples = [];
+    const keyVotes = new Map();
+    const keyTrackWithUrl = new Map();
+
+    for (let attempt = 1; attempt <= MAX_TRACK_API_ATTEMPTS; attempt += 1) {
+      const apiResult = await loadTracksFromApi(ctx, identity);
+      loginRequired = Boolean(apiResult?.data?.need_login_subtitle);
+      loginMid = apiResult?.data?.login_mid ?? null;
+
+      const candidates = pickSubtitleCandidates(ctx.video, apiResult);
+      const selected = chooseTrack(candidates);
+      const sample = normalizeTrackSample(selected, attempt, candidates.length);
+      samples.push(sample);
+
+      if (sample.trackKey) {
+        const nextVotes = (keyVotes.get(sample.trackKey) || 0) + 1;
+        keyVotes.set(sample.trackKey, nextVotes);
+
+        if (sample.hasUrl) {
+          keyTrackWithUrl.set(sample.trackKey, selected);
+        }
+
+        if (nextVotes >= 2 && keyTrackWithUrl.has(sample.trackKey)) {
+          return {
+            ok: true,
+            track: keyTrackWithUrl.get(sample.trackKey),
+            trackCount: candidates.length,
+            loginRequired,
+            loginMid,
+            trackResolution: {
+              strategy: "majority_vote_v1",
+              attemptCount: attempt,
+              resolvedBy: "early_consensus",
+              resolvedTrackKey: sample.trackKey,
+              resolvedVotes: nextVotes,
+              samples,
+            },
+          };
+        }
+      }
+
+      if (attempt < MAX_TRACK_API_ATTEMPTS) {
+        const backoff = TRACK_API_BACKOFF_MS[attempt - 1] ?? TRACK_API_BACKOFF_MS.at(-1) ?? 500;
+        await runtime.sleep(backoff);
+      }
+    }
+
+    let winningKey = null;
+    let winningVotes = 0;
+    for (const [key, votes] of keyVotes.entries()) {
+      if (votes > winningVotes) {
+        winningVotes = votes;
+        winningKey = key;
+      }
+    }
+
+    if (winningKey && winningVotes >= 2 && keyTrackWithUrl.has(winningKey)) {
+      return {
+        ok: true,
+        track: keyTrackWithUrl.get(winningKey),
+        trackCount: samples.at(-1)?.trackCount ?? 0,
+        loginRequired,
+        loginMid,
+        trackResolution: {
+          strategy: "majority_vote_v1",
+          attemptCount: samples.length,
+          resolvedBy: "majority",
+          resolvedTrackKey: winningKey,
+          resolvedVotes: winningVotes,
+          samples,
+        },
+      };
+    }
+
+    return {
+      ok: false,
+      code: loginRequired ? "SUBTITLE_REQUIRES_LOGIN" : "SUBTITLE_TRACK_UNSTABLE",
+      loginRequired,
+      loginMid,
+      trackResolution: {
+        strategy: "majority_vote_v1",
+        attemptCount: samples.length,
+        resolvedBy: "none",
+        samples,
+      },
+    };
   }
 
   async function resolveCidViaPagelistApi(ctx, args) {
@@ -180,17 +293,37 @@
         };
       }
 
-      let tracks = pickSubtitleTracks(ctx.video, null);
+      let tracks = pickSubtitleCandidates(ctx.video, null).filter((item) => Boolean(item.url));
       let subtitleSource = "embedded";
       let loginRequired = false;
       let loginMid = null;
+      let trackResolution = null;
+      let track = null;
 
       if (tracks.length === 0) {
-        const apiResult = await loadTracksFromApi(ctx, identity);
-        tracks = pickSubtitleTracks(ctx.video, apiResult);
+        const resolved = await resolveStableTrackViaApi(ctx, identity);
         subtitleSource = "player_api";
-        loginRequired = Boolean(apiResult?.data?.need_login_subtitle);
-        loginMid = apiResult?.data?.login_mid ?? null;
+        loginRequired = resolved.loginRequired;
+        loginMid = resolved.loginMid;
+        trackResolution = resolved.trackResolution;
+
+        if (!resolved.ok) {
+          return {
+            ok: false,
+            provider: PROVIDER,
+            code: resolved.code,
+            diagnostics: {
+              provider: PROVIDER,
+              cidSource: identity.cidSource,
+              loginRequired,
+              loginMid,
+              trackResolution,
+            },
+          };
+        }
+
+        track = resolved.track;
+        tracks = track ? [track] : [];
       }
 
       if (tracks.length === 0) {
@@ -203,11 +336,29 @@
             cidSource: identity.cidSource,
             loginRequired,
             loginMid,
+            trackResolution,
           },
         };
       }
 
-      const track = chooseTrack(tracks);
+      if (!track) {
+        track = chooseTrack(tracks);
+      }
+      if (!track?.url) {
+        return {
+          ok: false,
+          provider: PROVIDER,
+          code: "SUBTITLE_TRACK_UNSTABLE",
+          diagnostics: {
+            provider: PROVIDER,
+            cidSource: identity.cidSource,
+            loginRequired,
+            loginMid,
+            trackResolution,
+          },
+        };
+      }
+
       const subtitlePayload = await ctx.fetchJson(track.url);
       const lines = normalizeTranscriptLines(subtitlePayload);
 
@@ -240,6 +391,7 @@
           selectedTrackId: track.id,
           lineCount: lines.length,
           trackCount: tracks.length,
+          trackResolution,
         },
       };
     } catch (error) {

@@ -1,8 +1,6 @@
 "use client";
 
 import { trpc, getTrpcErrorCode } from "@/lib/trpc/react";
-import type { AppRouter } from "@/server";
-import type { inferRouterOutputs } from "@trpc/server";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -16,23 +14,32 @@ import {
   Inbox,
   Layers,
   Loader2,
+  MessageSquare,
   Video,
   Youtube,
 } from "lucide-react";
 
-type RouterOutputs = inferRouterOutputs<AppRouter>;
-type ResourceList = RouterOutputs["resource"]["list"];
+type SourceListItem = {
+  id: string;
+  type: string;
+  title: string;
+  createdAt: string | Date;
+  activeJob?: { status?: string } | null;
+};
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
   bilibili_capture: Video,
   web_capture: Globe,
+  web_page_capture: Globe,
+  wechat_article_capture: MessageSquare,
   youtube_capture: Youtube,
+  xiaohongshu_capture: Globe,
 };
 
 export function SourceList() {
   const router = useRouter();
   const { data, isLoading, error } = trpc.resource.list.useQuery();
-  const resources: ResourceList = useMemo(() => data ?? [], [data]);
+  const resources = useMemo(() => (data ?? []) as unknown as SourceListItem[], [data]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedCount = selectedIds.length;
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
@@ -61,7 +68,7 @@ export function SourceList() {
 
   const sortedResources = useMemo(() => {
     const items = resources.slice();
-    items.sort((a: ResourceList[number], b: ResourceList[number]) => {
+    items.sort((a, b) => {
       const aTs = new Date(a.createdAt).getTime();
       const bTs = new Date(b.createdAt).getTime();
       return sortDirection === "desc" ? bTs - aTs : aTs - bTs;
@@ -71,7 +78,7 @@ export function SourceList() {
 
   const toggleSelectAll = () => {
     setSelectedIds(
-      isAllSelected ? [] : resources.map((resource: ResourceList[number]) => resource.id)
+      isAllSelected ? [] : resources.map((resource) => resource.id)
     );
   };
 
@@ -160,7 +167,7 @@ export function SourceList() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {sortedResources.map((resource: ResourceList[number]) => (
+            {sortedResources.map((resource) => (
               <ResourceCard
                 key={resource.id}
                 resource={resource}
@@ -188,7 +195,7 @@ function ResourceCard({
   onToggleSelected,
   disabled,
 }: {
-  resource: ResourceList[number];
+  resource: SourceListItem;
   selected: boolean;
   onToggleSelected: (id: string) => void;
   disabled: boolean;
@@ -249,6 +256,9 @@ function ResourceCard({
         <p className="text-sm text-forest-muted truncate">
           {typeLabel}
         </p>
+        <p className="text-xs text-forest-muted/90 truncate">
+          {getStatusLabel(resource.activeJob?.status)}
+        </p>
       </div>
     </button>
   );
@@ -257,8 +267,11 @@ function ResourceCard({
 function getSourceLabel(type: string): string {
   const labels: Record<string, string> = {
     bilibili_capture: "B站",
+    wechat_article_capture: "公众号",
     web_capture: "网页",
+    web_page_capture: "网页",
     youtube_capture: "YouTube",
+    xiaohongshu_capture: "小红书",
   };
   return labels[type] ?? "其他";
 }
@@ -266,8 +279,21 @@ function getSourceLabel(type: string): string {
 function getTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     bilibili_capture: "视频素材",
+    wechat_article_capture: "文章素材",
     web_capture: "网页素材",
+    web_page_capture: "网页素材",
     youtube_capture: "视频素材",
+    xiaohongshu_capture: "图文素材",
   };
   return labels[type] ?? "素材";
+}
+
+function getStatusLabel(status?: string): string {
+  if (!status) return "未开始处理";
+  if (status === "PENDING") return "排队中";
+  if (status === "RUNNING") return "处理中";
+  if (status === "SUCCEEDED") return "已完成";
+  if (status === "FAILED") return "处理失败";
+  if (status === "CANCELLED") return "已取消";
+  return "状态未知";
 }
