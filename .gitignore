@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+scripts/.e2e-media-candidate.url
 
 # debug
 npm-debug.log*
@@ -45,3 +46,5 @@ next-env.d.ts
 
 # Cursor (local)
 .cursor/worktrees.json
+.env*.local
+.env.vercel.*

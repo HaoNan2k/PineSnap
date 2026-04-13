@@ -85,10 +85,6 @@
 - `POST /api/capture/jobs/:jobId/retry`  
   触发对失败或需要重试的采集任务进行重新调度。
 
-- `POST /api/capture/jobs/claim`  
-  供采集执行方批量领取可执行任务（队列消费型接口，通常用于采集 worker）。
-
-- `POST /api/capture/jobs/:jobId/complete`  
-  采集 worker 汇报任务执行完成、提交产物（通常携带 artifact/result 数据）。
+- 采集 worker 不通过 HTTP 领取/回写任务；worker 采用数据库直连方式消费 `CaptureJob` 队列并写回 `CaptureArtifact`。
 
 统一入口仍为 `POST /api/capture/jobs`。

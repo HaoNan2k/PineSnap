@@ -7,7 +7,8 @@
     "build": "prisma migrate deploy && prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "worker:run": "NODE_OPTIONS=--conditions=react-server tsx worker/main.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
