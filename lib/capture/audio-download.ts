@@ -9,7 +9,7 @@ type AudioCandidate = {
 
 export type DownloadedAudio = {
   bytes: Uint8Array;
-  source: "media_candidate" | "bilibili_api" | "yt_dlp";
+  source: "media_candidate" | "yt_dlp";
   sourceUrl: string;
   contentType: string | null;
   originalDurationSec: number | null;
@@ -118,25 +118,36 @@ async function runYtDlp(args: string[]): Promise<string> {
   });
 }
 
+const DEFAULT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+function isBilibiliCdnHost(hostname: string): boolean {
+  return (
+    hostname.includes("bilivideo.com") ||
+    hostname.includes("bilivideo.cn") ||
+    hostname.endsWith(".bilibili.com") ||
+    hostname === "bilibili.com" ||
+    hostname.includes("hdslb.com") ||
+    hostname.includes("akamaized.net")
+  );
+}
+
 function buildMediaFetchHeaders(
   url: string,
   opts?: { referer?: string; userAgent?: string }
 ): Record<string, string> | undefined {
   let referer = opts?.referer?.trim();
-  const userAgent = opts?.userAgent?.trim();
+  let userAgent = opts?.userAgent?.trim();
   let hostname = "";
   try {
     hostname = new URL(url).hostname.toLowerCase();
   } catch {
     return undefined;
   }
-  const bilibiliCdn =
-    hostname.includes("bilivideo.com") ||
-    hostname.endsWith(".bilibili.com") ||
-    hostname === "bilibili.com" ||
-    hostname.includes("hdslb.com");
-  if (bilibiliCdn && !referer) {
-    referer = "https://www.bilibili.com/";
+  // B 站 CDN 要求同时携带 Referer 和 User-Agent，缺任一返回 403。
+  if (isBilibiliCdnHost(hostname)) {
+    if (!referer) referer = "https://www.bilibili.com/";
+    if (!userAgent) userAgent = DEFAULT_USER_AGENT;
   }
   const headers: Record<string, string> = {};
   if (referer) headers.referer = referer;
@@ -227,101 +238,13 @@ async function resolveYtDlpAudioSource(args: {
 }
 
 // ---------------------------------------------------------------------------
-// Bilibili public API audio resolution
-// ---------------------------------------------------------------------------
-
-type BilibiliViewResponse = {
-  code: number;
-  data?: { pages?: Array<{ cid?: number; duration?: number }> };
-};
-
-type BilibiliPlayUrlResponse = {
-  code: number;
-  data?: {
-    dash?: {
-      audio?: Array<{ baseUrl?: string; base_url?: string; bandwidth?: number }>;
-    };
-  };
-};
-
-function extractBvidFromUrl(sourceUrl: string): string | null {
-  const match = sourceUrl.match(/\/(BV[\w]+)/i);
-  return match?.[1] ?? null;
-}
-
-async function resolveBilibiliApiAudio(args: {
-  sourceUrl: string;
-  bvid?: string;
-}): Promise<{ audioUrl: string; durationSec: number | null } | null> {
-  const bvid = args.bvid || extractBvidFromUrl(args.sourceUrl);
-  if (!bvid) {
-    console.log("[bilibili-api] no bvid found, skipping");
-    return null;
-  }
-
-  try {
-    console.log(`[bilibili-api] resolving audio for bvid=${bvid}`);
-    const viewRes = await fetch(
-      `https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`,
-      { signal: AbortSignal.timeout(15_000) }
-    );
-    if (!viewRes.ok) {
-      console.log(`[bilibili-api] view API returned ${viewRes.status}`);
-      return null;
-    }
-    const viewJson = (await viewRes.json()) as BilibiliViewResponse;
-    const firstPage = viewJson.data?.pages?.[0];
-    const cid = firstPage?.cid;
-    if (!cid) {
-      console.log(`[bilibili-api] no cid found, view response code=${viewJson.code}`);
-      return null;
-    }
-
-    console.log(`[bilibili-api] got cid=${cid}, fetching playurl`);
-    const playRes = await fetch(
-      `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}&fnval=16`,
-      { signal: AbortSignal.timeout(15_000) }
-    );
-    if (!playRes.ok) {
-      console.log(`[bilibili-api] playurl API returned ${playRes.status}`);
-      return null;
-    }
-    const playJson = (await playRes.json()) as BilibiliPlayUrlResponse;
-    const audioStreams = playJson.data?.dash?.audio;
-    if (!audioStreams || audioStreams.length === 0) {
-      console.log(`[bilibili-api] no audio streams in playurl response, code=${playJson.code}`);
-      return null;
-    }
-
-    const audioUrl = audioStreams[0].baseUrl ?? audioStreams[0].base_url;
-    if (!audioUrl) {
-      console.log("[bilibili-api] audio stream has no URL");
-      return null;
-    }
-
-    console.log(`[bilibili-api] resolved audio URL (${audioUrl.slice(0, 80)}...)`);
-    return {
-      audioUrl,
-      durationSec:
-        typeof firstPage?.duration === "number" && firstPage.duration > 0
-          ? firstPage.duration
-          : null,
-    };
-  } catch (error) {
-    console.log(`[bilibili-api] error: ${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Main entry: candidates → Bilibili API → yt-dlp
+// Main entry: media candidates → yt-dlp
 // ---------------------------------------------------------------------------
 
 export async function resolveAudioForAsr(args: {
   sourceUrl: string;
   userAgent?: string;
   referer?: string;
-  bvid?: string;
   candidates?: AudioCandidate[];
 }): Promise<DownloadedAudio> {
   const headerOpts = { referer: args.referer, userAgent: args.userAgent };
@@ -340,37 +263,8 @@ export async function resolveAudioForAsr(args: {
             : null,
       };
     } catch {
-      // Try next candidate or fallback.
+      // Try next candidate or yt-dlp fallback.
     }
-  }
-
-  // Bilibili public API fallback
-  console.log("[audio-resolve] trying Bilibili API fallback");
-  const biliApi = await resolveBilibiliApiAudio({
-    sourceUrl: args.sourceUrl,
-    bvid: args.bvid,
-  });
-  if (biliApi) {
-    try {
-      console.log("[audio-resolve] downloading audio via Bilibili API URL");
-      const downloaded = await fetchAudioBytes(biliApi.audioUrl, {
-        referer: "https://www.bilibili.com/",
-        userAgent: args.userAgent,
-      });
-      console.log(`[audio-resolve] Bilibili API download OK, ${downloaded.bytes.byteLength} bytes`);
-      return {
-        bytes: downloaded.bytes,
-        source: "bilibili_api",
-        sourceUrl: biliApi.audioUrl,
-        contentType: downloaded.contentType,
-        originalDurationSec: biliApi.durationSec,
-      };
-    } catch (error) {
-      console.log(`[audio-resolve] Bilibili API download failed: ${error instanceof Error ? error.message : String(error)}`);
-      // Fall through to yt-dlp.
-    }
-  } else {
-    console.log("[audio-resolve] Bilibili API returned no audio URL, falling back to yt-dlp");
   }
 
   const fallback = await resolveYtDlpAudioSource({
