@@ -17,7 +17,7 @@
 
 ### 非目标
 
-- 不讨论具体字幕抓取与 payload 结构（这属于采集 extractor 与 `Resource.content` 契约）。
+- 不讨论具体字幕抓取与 payload 结构（这属于采集 extractor 与 `CaptureArtifact.content` 契约）。
 - 不把网页端 session/cookie 直接下发给扩展（扩展仅使用 capture token）。
 
 ---
@@ -118,7 +118,7 @@ sequenceDiagram
 
   E->>S: ⑮ POST /api/capture/jobs\nAuthorization: Bearer token\ncaptureContext + artifact
   S->>DB: ⑯ verifyCaptureToken(tokenHash)\n检查 revokedAt + scopes\n并更新 lastUsedAt
-  S->>DB: ⑰ create Resource(userId=token所属用户, content=payload)
+  S->>DB: ⑰ create Resource + CaptureJob + CaptureArtifact
   S-->>E: ⑱ 返回 { ok: true, resourceId, jobId, status, idempotent }
 ```
 

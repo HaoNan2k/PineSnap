@@ -42,23 +42,47 @@
     }, 2500);
   }
 
-  function describeExtractFailure(code) {
+  /** 字幕失败且无法 fallback 到 ASR 时的提示（仅 MISSING_VIDEO_CONTEXT 属于此类）。 */
+  function describeTerminalFailure(code) {
     switch (code) {
       case "MISSING_VIDEO_CONTEXT":
         return "未能识别当前视频信息，请刷新页面后重试。";
-      case "MISSING_CID":
-        return "未能定位当前分 P 标识（cid），请稍后重试。";
-      case "SUBTITLE_REQUIRES_LOGIN":
-        return "当前视频字幕需要登录态，请确认 B 站登录后重试。";
-      case "NO_SUBTITLE_TRACK":
-        return "未检测到可用字幕轨。";
-      case "SUBTITLE_FETCH_FAILED":
-        return "字幕拉取失败，请稍后重试。";
-      case "SUBTITLE_TRACK_UNSTABLE":
-        return "字幕轨道返回不稳定，请稍后重试。";
       default:
         return "采集失败，请打开控制台查看详情。";
     }
+  }
+
+  /**
+   * 从 B 站 __playinfo__ 中提取 DASH 音频流 URL 作为 mediaCandidates。
+   * 返回 [{kind, url, mimeType, bitrateKbps}] 或空数组。
+   */
+  function extractMediaCandidates(playinfo) {
+    const audio =
+      playinfo?.data?.dash?.audio ||
+      playinfo?.result?.dash?.audio ||
+      [];
+    if (!Array.isArray(audio) || audio.length === 0) return [];
+
+    return audio
+      .filter((a) => typeof (a?.baseUrl || a?.base_url) === "string")
+      .map((a) => ({
+        kind: "audio",
+        url: a.baseUrl || a.base_url,
+        mimeType: a.mimeType || a.mime_type || "audio/mp4",
+        bitrateKbps:
+          typeof a.bandwidth === "number" ? Math.round(a.bandwidth / 1000) : undefined,
+      }));
+  }
+
+  /** 判断字幕提取失败码是否可以 fallback 到 ASR（无字幕但视频本身可识别）。 */
+  function canFallbackToAsr(code) {
+    return (
+      code === "NO_SUBTITLE_TRACK" ||
+      code === "SUBTITLE_TRACK_UNSTABLE" ||
+      code === "SUBTITLE_FETCH_FAILED" ||
+      code === "SUBTITLE_REQUIRES_LOGIN" ||
+      code === "MISSING_CID"
+    );
   }
 
   async function fetchJson(url, options) {
@@ -103,21 +127,54 @@
         return;
       }
 
-      toast("正在提取字幕...");
+      toast("正在采集...");
       const video = runtime.getVideoContext();
       const result = await registry.run({
         video,
         fetchJson,
       });
 
-      if (!result.ok) {
-        console.warn("[PineSnap capture] extractor attempts", result.attempts);
-        toast(describeExtractFailure(result.code));
+      let payload;
+      if (result.ok) {
+        // 字幕提取成功，带 artifact 提交（同步完成）
+        payload = result.payload;
+      } else if (canFallbackToAsr(result.code)) {
+        // 字幕失败但可 fallback：提交 mediaCandidates，由 worker 做 ASR
+        console.info("[PineSnap capture] subtitle failed, falling back to ASR", {
+          code: result.code,
+          attempts: result.attempts,
+        });
+        const candidates = extractMediaCandidates(video.playinfo);
+        payload = {
+          version: 1,
+          metadata: {
+            platform: "bilibili",
+            id: video.id,
+            url: video.url,
+            title: video.title || undefined,
+            captureDiagnostics: {
+              subtitleFailCode: result.code,
+              attempts: result.attempts,
+              asrFallback: true,
+              mediaCandidateCount: candidates.length,
+            },
+          },
+          content: {},
+          mediaCandidates: candidates,
+          accessContext: {
+            referer: "https://www.bilibili.com/",
+            userAgent: navigator.userAgent,
+          },
+        };
+      } else {
+        // 无法恢复的错误（如 MISSING_VIDEO_CONTEXT）
+        console.warn("[PineSnap capture] terminal failure", result.attempts);
+        toast(describeTerminalFailure(result.code));
         return;
       }
 
       toast("正在发送到 PineSnap...");
-      const upload = await uploadCapture(config.baseUrl, config.token, result.payload);
+      const upload = await uploadCapture(config.baseUrl, config.token, payload);
       if (!upload?.ok) {
         console.warn("[PineSnap capture] upload failed", upload);
         if (upload?.status === 401 || upload?.status === 403) {
@@ -133,7 +190,8 @@
       console.info("[PineSnap capture] success", {
         resourceId: upload.body?.resourceId,
         jobId: upload.body?.jobId,
-        provider: result.provider,
+        status: upload.body?.status,
+        provider: result.ok ? result.provider : "asr_fallback",
         attempts: result.attempts,
       });
     } catch (error) {

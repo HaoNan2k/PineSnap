@@ -1,5 +1,9 @@
 # Bilibili 字幕错轨问题发现报告
 
+> 历史术语映射（当前模型）：
+> - 旧 `Resource.content` -> 现 `CaptureArtifact.content`（正文）+ `Resource.metadata`（对象元信息）
+> - 旧 `externalId` -> 现优先使用 `canonicalUrl`、`sourceFingerprint` 与 `providerContext`
+
 ## 文档信息
 
 - **文档类型**: Bug 发现与排障记录
@@ -35,7 +39,7 @@
 
 ## 3. 复现与发现过程摘要
 
-针对同一视频连续采集多次并核对数据库 `Resource.content` 后发现：
+针对同一视频连续采集多次并核对数据库正文产物（当前为 `CaptureArtifact.content`）后发现：
 
 - `metadata.id / url / title` 均指向目标视频；
 - `captureDiagnostics.cid` 保持一致（`31429168869`）；
@@ -51,9 +55,9 @@
 
 ## 4. 关键证据
 
-## 4.1 数据库证据（同一 externalId）
+## 4.1 数据库证据（同一视频标识）
 
-- `externalId = BV1CDhpzvEht` 下，出现多个不同 `selectedTrackId`；
+- `BV1CDhpzvEht` 下，出现多个不同 `selectedTrackId`；
 - 正确样本与错误样本均存在，且文本首句可直接区分语义是否匹配。
 
 ## 4.2 Service Worker 抓包证据

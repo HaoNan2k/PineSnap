@@ -1,6 +1,6 @@
 # Capture 鉴权数据模型（长期维护）
 
-本文是 PineSnap「浏览器扩展采集鉴权」的长期真相文档，描述 `CaptureAuthCode`、`CaptureToken` 与 `Resource` 的职责、关系和生命周期。
+本文是 PineSnap「浏览器扩展采集鉴权」的长期真相文档，描述 `CaptureAuthCode`、`CaptureToken` 与采集写入链路的职责、关系和生命周期。
 
 > 适用范围：`/connect/bilibili/authorize`、`/api/capture/extension/*`、`/api/capture/jobs`。
 
@@ -34,11 +34,11 @@
   - `revokedAt` / `lastUsedAt`：撤销与使用审计
 - 生命周期：签发 -> 使用 -> 轮换/撤销
 
-### 2.3 `Resource`（采集结果落库）
+### 2.3 `Resource`（采集对象壳）
 
-- 用途：存储采集后的结构化内容。
+- 用途：保存采集对象元信息（标题、跳转链接、封面等）。
 - 与鉴权关系：通过 token 解析出的 `userId` 决定写入归属。
-- `content` 保持原始 payload（`VideoCapturePayloadV1`）语义。
+- 正文语义不在 `Resource`，而在 `CaptureArtifact.content`。
 
 ## 3. 表之间的关系
 
@@ -59,10 +59,12 @@ flowchart LR
   exchange --> captureToken[CaptureToken]
   captureToken --> captureApi[BilibiliCaptureAPI]
   captureApi --> resource[Resource]
+  captureApi --> job[CaptureJob]
+  captureApi --> artifact[CaptureArtifact]
 ```
 
 - 一个 `CaptureAuthCode` 在成功消费后，产生一个新的 `CaptureToken`（过程上接近 1:1）。
-- 一个 `CaptureToken` 可用于多次采集，写入多条 `Resource`（过程上 1:N）。
+- 一个 `CaptureToken` 可用于多次采集，写入多条 `Resource` 与关联 `CaptureJob/CaptureArtifact`（过程上 1:N）。
 
 ## 4. 关键代码映射
 

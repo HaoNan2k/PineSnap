@@ -21,19 +21,20 @@ import {
 
 type SourceListItem = {
   id: string;
-  type: string;
+  sourceType: string;
   title: string;
+  canonicalUrl: string;
+  thumbnailUrl?: string | null;
   createdAt: string | Date;
   activeJob?: { status?: string } | null;
 };
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
-  bilibili_capture: Video,
-  web_capture: Globe,
-  web_page_capture: Globe,
-  wechat_article_capture: MessageSquare,
-  youtube_capture: Youtube,
-  xiaohongshu_capture: Globe,
+  bilibili: Video,
+  web_page: Globe,
+  wechat_article: MessageSquare,
+  youtube: Youtube,
+  xiaohongshu: Globe,
 };
 
 export function SourceList() {
@@ -200,12 +201,12 @@ function ResourceCard({
   onToggleSelected: (id: string) => void;
   disabled: boolean;
 }) {
-  const sourceLabel = getSourceLabel(resource.type);
+  const sourceLabel = getSourceLabel(resource.sourceType);
   const dateFormatted = format(new Date(resource.createdAt), "M月d日", {
     locale: zhCN,
   });
-  const typeLabel = getTypeLabel(resource.type);
-  const TypeIcon = TYPE_ICONS[resource.type] ?? Layers;
+  const typeLabel = getTypeLabel(resource.sourceType);
+  const TypeIcon = TYPE_ICONS[resource.sourceType] ?? Layers;
 
   return (
     <button
@@ -223,7 +224,16 @@ function ResourceCard({
       ].join(" ")}
     >
       <div className="relative w-full aspect-[4/3] rounded-xl border border-sand/40 bg-sand/10 flex items-center justify-center overflow-hidden">
-        <TypeIcon className="h-9 w-9 text-primary" aria-hidden />
+        {resource.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resource.thumbnailUrl}
+            alt={resource.title}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <TypeIcon className="h-9 w-9 text-primary" aria-hidden />
+        )}
         <div className="absolute top-3 right-3 flex items-center gap-2">
           {selected ? (
             <span className="inline-flex items-center justify-center size-7 rounded-full bg-primary text-white shadow-sm">
@@ -256,6 +266,9 @@ function ResourceCard({
         <p className="text-sm text-forest-muted truncate">
           {typeLabel}
         </p>
+        <p className="text-xs text-forest-muted/80 truncate">
+          {resource.canonicalUrl}
+        </p>
         <p className="text-xs text-forest-muted/90 truncate">
           {getStatusLabel(resource.activeJob?.status)}
         </p>
@@ -264,28 +277,26 @@ function ResourceCard({
   );
 }
 
-function getSourceLabel(type: string): string {
+function getSourceLabel(sourceType: string): string {
   const labels: Record<string, string> = {
-    bilibili_capture: "B站",
-    wechat_article_capture: "公众号",
-    web_capture: "网页",
-    web_page_capture: "网页",
-    youtube_capture: "YouTube",
-    xiaohongshu_capture: "小红书",
+    bilibili: "B站",
+    wechat_article: "公众号",
+    web_page: "网页",
+    youtube: "YouTube",
+    xiaohongshu: "小红书",
   };
-  return labels[type] ?? "其他";
+  return labels[sourceType] ?? "其他";
 }
 
-function getTypeLabel(type: string): string {
+function getTypeLabel(sourceType: string): string {
   const labels: Record<string, string> = {
-    bilibili_capture: "视频素材",
-    wechat_article_capture: "文章素材",
-    web_capture: "网页素材",
-    web_page_capture: "网页素材",
-    youtube_capture: "视频素材",
-    xiaohongshu_capture: "图文素材",
+    bilibili: "视频素材",
+    wechat_article: "文章素材",
+    web_page: "网页素材",
+    youtube: "视频素材",
+    xiaohongshu: "图文素材",
   };
-  return labels[type] ?? "素材";
+  return labels[sourceType] ?? "素材";
 }
 
 function getStatusLabel(status?: string): string {

@@ -8,7 +8,6 @@ import {
   captureJobTypeSchema,
   captureContextSchema,
   inferJobTypeFromSource,
-  inferResourceType,
   normalizeCanonicalUrl,
   requiredCaptureScope,
 } from "@/lib/capture/context";
@@ -40,9 +39,20 @@ const createJobSchema = z.object({
   jobType: captureJobTypeSchema.optional(),
   executionMode: z.enum(["INLINE", "ASYNC"]).optional(),
   title: z.string().min(1).max(200).optional(),
-  externalId: z.string().min(1).max(200).optional(),
+  thumbnailUrl: z.string().url().optional(),
   artifact: artifactSchema.optional(),
 });
+
+function inferJobTypeFromInput(args: {
+  sourceType: z.infer<typeof captureContextSchema>["sourceType"];
+  explicitJobType?: z.infer<typeof captureJobTypeSchema>;
+  artifactKind?: z.infer<typeof artifactSchema>["kind"];
+}) {
+  if (args.explicitJobType) return args.explicitJobType;
+  if (args.artifactKind === "official_subtitle") return "subtitle_fetch";
+  if (args.artifactKind === "asr_transcript") return "audio_transcribe";
+  return inferJobTypeFromSource(args.sourceType);
+}
 
 export async function OPTIONS(req: Request) {
   return new Response(null, {
@@ -69,7 +79,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { captureContext, artifact, title, externalId, jobType, executionMode } = parsed.data;
+    const { captureContext, artifact, title, thumbnailUrl, jobType, executionMode } = parsed.data;
     const auth = await verifyCaptureToken({
       token,
       requiredScope: requiredCaptureScope(captureContext.sourceType),
@@ -87,23 +97,27 @@ export async function POST(req: Request) {
     const resourceTitle =
       title?.trim() ||
       `${captureContext.sourceType}: ${new URL(captureContext.sourceUrl).hostname}`.slice(0, 200);
+    const resolvedJobType = inferJobTypeFromInput({
+      sourceType: captureContext.sourceType,
+      explicitJobType: jobType,
+      artifactKind: artifact?.kind,
+    });
+
     const created = await createCaptureResourceAndJobWithIdempotency({
       userId: auth.userId,
       sourceType: captureContext.sourceType,
-      jobType: jobType ?? inferJobTypeFromSource(captureContext.sourceType),
+      jobType: resolvedJobType,
       executionMode: executionMode ?? (artifact ? "INLINE" : "ASYNC"),
       captureRequestId: captureContext.captureRequestId,
       inputContext: captureContext,
       resource: {
-        type: inferResourceType(captureContext.sourceType),
-        sourceUrl: captureContext.sourceUrl,
         canonicalUrl,
         sourceFingerprint,
         title: resourceTitle,
-        externalId: externalId ?? null,
-        content: {
+        thumbnailUrl: thumbnailUrl ?? null,
+        metadata: {
           schemaVersion: captureContext.schemaVersion,
-          captureContext,
+          sourceUrl: captureContext.sourceUrl,
         },
       },
       initialJob: {
@@ -129,11 +143,11 @@ export async function POST(req: Request) {
 
     if (artifact) {
       await createCaptureArtifact({
-        resourceId,
         jobId,
         kind: artifact.kind,
         language: artifact.language ?? null,
         format: artifact.format ?? null,
+        schemaVersion: captureContext.schemaVersion,
         qualityScore: artifact.qualityScore ?? null,
         content: artifact.content,
         isPrimary: artifact.isPrimary ?? true,

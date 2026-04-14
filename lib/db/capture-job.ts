@@ -14,7 +14,7 @@ export async function findCaptureJobByIdForUser(args: { jobId: string; userId: s
   return prisma.captureJob.findFirst({
     where: {
       id: args.jobId,
-      userId: args.userId,
+      resource: { userId: args.userId },
     },
     select: {
       id: true,
@@ -44,7 +44,6 @@ export async function findCaptureJobById(args: { jobId: string }) {
     where: { id: args.jobId },
     select: {
       id: true,
-      userId: true,
       resourceId: true,
       sourceType: true,
       jobType: true,
@@ -70,7 +69,7 @@ export async function listCaptureJobsForResource(args: { resourceId: string; use
   return prisma.captureJob.findMany({
     where: {
       resourceId: args.resourceId,
-      userId: args.userId,
+      resource: { userId: args.userId },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
@@ -134,7 +133,7 @@ export async function getActiveCaptureJobForResource(args: {
 }) {
   return prisma.captureJob.findFirst({
     where: {
-      userId: args.userId,
+      resource: { userId: args.userId },
       resourceId: args.resourceId,
       superseded: false,
     },
@@ -182,48 +181,53 @@ export async function requeueCaptureJob(args: {
 export async function claimPendingCaptureJobs(args: {
   limit: number;
   sourceType?: CaptureSourceType;
+  jobType?: CaptureJobType;
 }) {
   const limit = Math.max(1, Math.min(args.limit, 50));
   const now = new Date();
   return prisma.$transaction(async (tx) => {
-    const candidates = await tx.captureJob.findMany({
+    const sourceTypeFilter = args.sourceType
+      ? Prisma.sql`AND "sourceType" = ${args.sourceType}::"CaptureSourceType"`
+      : Prisma.empty;
+    const jobTypeFilter = args.jobType
+      ? Prisma.sql`AND "jobType" = ${args.jobType}::"CaptureJobType"`
+      : Prisma.empty;
+
+    const lockedRows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id"
+      FROM "CaptureJob"
+      WHERE "status" = 'PENDING'::"CaptureJobStatus"
+        AND "superseded" = false
+        ${sourceTypeFilter}
+        ${jobTypeFilter}
+      ORDER BY "createdAt" ASC, "id" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${limit}
+    `);
+
+    if (lockedRows.length === 0) return [];
+
+    const claimedIds = lockedRows.map((row) => row.id);
+
+    await tx.captureJob.updateMany({
       where: {
+        id: { in: claimedIds },
         status: "PENDING",
-        sourceType: args.sourceType,
       },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: limit,
-      select: {
-        id: true,
+      data: {
+        status: "RUNNING",
+        stage: "CLAIMED",
+        startedAt: now,
       },
     });
-
-    if (candidates.length === 0) return [];
-
-    const claimedIds: string[] = [];
-    for (const candidate of candidates) {
-      const updated = await tx.captureJob.updateMany({
-        where: { id: candidate.id, status: "PENDING" },
-        data: {
-          status: "RUNNING",
-          stage: "CLAIMED",
-          startedAt: now,
-        },
-      });
-      if (updated.count === 1) {
-        claimedIds.push(candidate.id);
-      }
-    }
-
-    if (claimedIds.length === 0) return [];
 
     return tx.captureJob.findMany({
       where: { id: { in: claimedIds } },
       select: {
         id: true,
-        userId: true,
         resourceId: true,
         sourceType: true,
+        jobType: true,
         captureRequestId: true,
         status: true,
         stage: true,
@@ -246,13 +250,11 @@ export async function createCaptureResourceAndJobWithIdempotency(args: {
   captureRequestId: string;
   inputContext: unknown;
   resource: {
-    type: string;
-    sourceUrl?: string | null;
-    canonicalUrl?: string | null;
+    canonicalUrl: string;
     sourceFingerprint?: string | null;
     title: string;
-    externalId?: string | null;
-    content: unknown;
+    thumbnailUrl?: string | null;
+    metadata?: unknown;
   };
   initialJob?: {
     status?: CaptureJobStatus;
@@ -260,15 +262,44 @@ export async function createCaptureResourceAndJobWithIdempotency(args: {
   };
 }) {
   const inputContext = args.inputContext as Prisma.InputJsonValue;
-  const resourceContent = args.resource.content as Prisma.InputJsonValue;
+  const resourceMetadata = (args.resource.metadata ?? null) as Prisma.InputJsonValue;
 
   const doCreate = async () => {
     return prisma.$transaction(async (tx) => {
-      const existing = await tx.captureJob.findUnique({
+      let resource = await tx.resource.findFirst({
         where: {
-          userId_sourceType_captureRequestId: {
+          userId: args.userId,
+          sourceType: args.sourceType,
+          canonicalUrl: args.resource.canonicalUrl,
+        },
+        select: {
+          id: true,
+          title: true,
+        },
+      });
+
+      if (!resource) {
+        resource = await tx.resource.create({
+          data: {
             userId: args.userId,
             sourceType: args.sourceType,
+            canonicalUrl: args.resource.canonicalUrl,
+            sourceFingerprint: args.resource.sourceFingerprint ?? null,
+            title: args.resource.title,
+            thumbnailUrl: args.resource.thumbnailUrl ?? null,
+            metadata: resourceMetadata,
+          },
+          select: {
+            id: true,
+            title: true,
+          },
+        });
+      }
+
+      const existing = await tx.captureJob.findUnique({
+        where: {
+          resourceId_captureRequestId: {
+            resourceId: resource.id,
             captureRequestId: args.captureRequestId,
           },
         },
@@ -285,35 +316,13 @@ export async function createCaptureResourceAndJobWithIdempotency(args: {
       if (existing) {
         return {
           idempotent: true,
-          resource: await tx.resource.findUniqueOrThrow({
-            where: { id: existing.resourceId },
-            select: { id: true, title: true },
-          }),
+          resource,
           job: existing,
         };
       }
 
-      const resource = await tx.resource.create({
-        data: {
-          userId: args.userId,
-          type: args.resource.type,
-          sourceType: args.sourceType,
-          sourceUrl: args.resource.sourceUrl ?? null,
-          canonicalUrl: args.resource.canonicalUrl ?? null,
-          sourceFingerprint: args.resource.sourceFingerprint ?? null,
-          title: args.resource.title,
-          externalId: args.resource.externalId ?? null,
-          content: resourceContent,
-        },
-        select: {
-          id: true,
-          title: true,
-        },
-      });
-
       const job = await tx.captureJob.create({
         data: {
-          userId: args.userId,
           resourceId: resource.id,
           sourceType: args.sourceType,
           jobType: args.jobType,
@@ -348,14 +357,13 @@ export async function createCaptureResourceAndJobWithIdempotency(args: {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      const existing = await prisma.captureJob.findUnique({
+      const existing = await prisma.captureJob.findFirst({
         where: {
-          userId_sourceType_captureRequestId: {
-            userId: args.userId,
-            sourceType: args.sourceType,
-            captureRequestId: args.captureRequestId,
-          },
+          captureRequestId: args.captureRequestId,
+          sourceType: args.sourceType,
+          resource: { userId: args.userId },
         },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
           resourceId: true,
