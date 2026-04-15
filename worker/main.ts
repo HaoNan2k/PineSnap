@@ -133,14 +133,28 @@ async function main() {
     stopRequested = true;
   });
 
-  while (!stopRequested) {
-    const handled = await processBatch({
-      limit: batchSize,
-      sourceType,
-    });
+  let consecutiveErrors = 0;
 
-    if (handled === 0) {
-      await sleep(pollIntervalMs);
+  while (!stopRequested) {
+    try {
+      const handled = await processBatch({
+        limit: batchSize,
+        sourceType,
+      });
+
+      consecutiveErrors = 0;
+
+      if (handled === 0) {
+        await sleep(pollIntervalMs);
+      }
+    } catch (error) {
+      consecutiveErrors++;
+      const backoffMs = Math.min(pollIntervalMs * 2 ** consecutiveErrors, 5 * 60_000);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[capture-worker] poll error (${consecutiveErrors}x, backoff ${backoffMs}ms): ${message}`
+      );
+      await sleep(backoffMs);
     }
   }
 
@@ -151,7 +165,7 @@ main()
   .catch((error) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
     console.error(`[capture-worker] fatal: ${message}`);
-    process.exitCode = 1;
+    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
