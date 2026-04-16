@@ -23,15 +23,15 @@ import { Role } from "@/generated/prisma/client";
 import { getConversation, touchConversation } from "@/lib/db/conversation";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
-import { a2uiTools } from "@/lib/chat/tools";
-import { getContextSystemPrompt } from "@/lib/chat/context-manager";
+import { a2uiTools, createServerTools } from "@/lib/chat/tools";
+import { getContextSystemPrompt, getClarifySystemPrompt } from "@/lib/chat/context-manager";
 import {
   recordLearnTraceError,
   recordLearnTraceFinish,
   recordLearnTraceStart,
 } from "@/lib/dev/trace-store";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function toTraceMessages(messages: ModelMessage[]) {
   return messages.map((m) => ({ role: m.role, content: m.content }));
@@ -130,12 +130,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!learning.plan) {
-      return Response.json({ error: "Learning plan required" }, { status: 400 });
-    }
+    const isClarifyMode = !learning.plan;
 
     // 2. Persist User/Tool Message
-    // If input contains tool-result, it must be Role.tool for the model to understand context.
     const hasToolResult = input.some((p) => p.type === "tool-result");
     const messageRole = hasToolResult ? Role.tool : Role.user;
 
@@ -157,10 +154,12 @@ export async function POST(req: Request) {
       }))
     );
 
-    const systemPrompt = await getContextSystemPrompt(userId, {
-      learningPlan: learning.plan,
-      resourcesContext: contextText,
-    });
+    const systemPrompt = isClarifyMode
+      ? await getClarifySystemPrompt(userId, { resourcesContext: contextText })
+      : await getContextSystemPrompt(userId, {
+          learningPlan: learning.plan!,
+          resourcesContext: contextText,
+        });
 
     const modelMessages = await dbToModelMessages(conversation.messages);
 
@@ -177,10 +176,15 @@ export async function POST(req: Request) {
       requestMessages: toTraceMessages(requestMessages),
     });
 
+    const serverTools = createServerTools(learningId);
+    const tools = isClarifyMode
+      ? { savePlan: serverTools.savePlan }
+      : { ...a2uiTools, ...serverTools };
+
     const result = streamText({
       model: "openai/gpt-5.2",
       messages: requestMessages,
-      tools: a2uiTools,
+      tools,
       stopWhen: stepCountIs(5),
       onError: (error) => {
         recordLearnTraceError(traceRoundId, errorToString(error));

@@ -120,6 +120,44 @@ function resolveAnswerText(
 }
 
 export const learningRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const { prisma } = await import("@/lib/prisma");
+    const learnings = await prisma.learning.findMany({
+      where: {
+        deletedAt: null,
+        resources: {
+          some: {
+            resource: { userId: ctx.user.id },
+          },
+        },
+      },
+      include: {
+        resources: {
+          include: {
+            resource: {
+              select: { id: true, title: true, sourceType: true, thumbnailUrl: true },
+            },
+          },
+        },
+        conceptsCovered: {
+          select: { concept: true, coveredAt: true },
+          orderBy: { coveredAt: "desc" },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    });
+
+    return learnings.map((l) => ({
+      id: l.id,
+      hasPlan: !!l.plan,
+      createdAt: l.createdAt.toISOString(),
+      updatedAt: l.updatedAt.toISOString(),
+      resources: l.resources.map((r) => r.resource),
+      conceptsCovered: l.conceptsCovered.length,
+    }));
+  }),
+
   create: protectedProcedure
     .input(
       z.object({

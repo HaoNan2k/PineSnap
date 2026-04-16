@@ -1,7 +1,7 @@
 "use client";
 
 import { trpc, getTrpcErrorCode } from "@/lib/trpc/react";
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -53,11 +53,11 @@ export function SourceList() {
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
-  const toggleSelected = (id: string) => {
+  const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
-  };
+  }, []);
 
   const startLearning = async (resourceIds: string[]) => {
     if (resourceIds.length === 0 || createLearning.isPending) return;
@@ -190,7 +190,7 @@ export function SourceList() {
   );
 }
 
-function ResourceCard({
+const ResourceCard = memo(function ResourceCard({
   resource,
   selected,
   onToggleSelected,
@@ -275,7 +275,7 @@ function ResourceCard({
       </div>
     </button>
   );
-}
+});
 
 function getSourceLabel(sourceType: string): string {
   const labels: Record<string, string> = {

@@ -48,3 +48,4 @@ next-env.d.ts
 .cursor/worktrees.json
 .env*.local
 .env.vercel.*
+.gstack/

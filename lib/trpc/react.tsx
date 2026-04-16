@@ -56,7 +56,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
               }
               return failureCount < 3;
             },
-            staleTime: 5000,
+            staleTime: 60_000,
             refetchOnWindowFocus: false,
           },
         },
