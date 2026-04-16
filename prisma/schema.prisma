@@ -140,6 +140,18 @@ model Learning {
   deletedAt     DateTime?
   resources     LearningResource[]
   conversations LearningConversation[]
+  conceptsCovered ConceptCoverage[]
+}
+
+model ConceptCoverage {
+  id         String   @id @default(uuid(7))
+  learningId String
+  concept    String
+  coveredAt  DateTime @default(now())
+  learning   Learning @relation(fields: [learningId], references: [id])
+
+  @@unique([learningId, concept])
+  @@index([learningId])
 }
 
 model LearningResource {

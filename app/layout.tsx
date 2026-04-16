@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Merriweather } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { TRPCProvider } from "@/lib/trpc/react";
 import { AuthProvider } from "@/components/auth/auth-provider";
@@ -14,19 +14,36 @@ export const metadata: Metadata = {
   },
 };
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  display: "optional",
-  variable: "--font-inter",
+const plusJakarta = localFont({
+  src: "../public/fonts/plus-jakarta-sans-latin.woff2",
+  weight: "300 700",
+  style: "normal",
+  display: "swap",
+  variable: "--font-plus-jakarta",
 });
 
-const merriweather = Merriweather({
-  subsets: ["latin"],
-  weight: ["300", "400", "700"],
-  style: ["normal", "italic"],
-  display: "optional",
-  variable: "--font-merriweather",
+const fraunces = localFont({
+  src: [
+    {
+      path: "../public/fonts/fraunces-latin.woff2",
+      style: "normal",
+    },
+    {
+      path: "../public/fonts/fraunces-latin-italic.woff2",
+      style: "italic",
+    },
+  ],
+  weight: "300 700",
+  display: "swap",
+  variable: "--font-fraunces",
+});
+
+const jetbrainsMono = localFont({
+  src: "../public/fonts/jetbrains-mono-latin.woff2",
+  weight: "400 500",
+  style: "normal",
+  display: "swap",
+  variable: "--font-jetbrains-mono",
 });
 
 export default function RootLayout({
@@ -40,7 +57,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${merriweather.variable} antialiased`}
+        className={`${plusJakarta.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}
       >
         <TRPCProvider>
           <AuthProvider supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey}>
