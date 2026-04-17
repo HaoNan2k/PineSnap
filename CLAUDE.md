@@ -70,19 +70,45 @@ PineSnap 是一个基于 React 的 AI 应用。
 
 ## 开发规范
 
-- 始终在功能分支上工作，不要直接提交到 main
-- 仅在用户明确要求时才推送到远程仓库
-- 提交信息中不要添加 AI 共同作者标注
+> 分支、提交、沟通等通用规范见全局 `~/.claude/CLAUDE.md`，此处仅列项目特有规则。
 
 ## 文档维护
 
-当安装新的插件、skill 或命令时，必须同步更新 `docs/claude-code-plugin-skill-guide.md`。主动提醒用户并确认后再更新。
+拒绝 vibe coding。每次任务结束时对照沉淀触发清单（设计决策 / 复杂模块 / 性能优化 / 有教训价值的排障），命中则调用 `sediment-doc` skill 起草文档，用户确认后再写。触发条件、命名约定、模板和写作原则详见 skill。
+
+文档目录结构和导航见 `docs/README.md`。
+
+其他硬性规则：
+
+- 项目文档使用简体中文
+- 安装新插件 / skill / 命令时，同步更新 `docs/tooling/claude-code-plugin-skill-guide.md`
+- 触达路由 / API / DB / 权限 / 存储契约：先改 OpenSpec，再同步 `docs/platform/` 或对应领域目录下的真相文档
+- 新 DB 字段必须在 `docs/platform/database-data-dictionary.md` 补齐定义
 
 ## 技术栈
 
 - React（前端）
 - Next.js
 - TypeScript
+- Framer Motion（动画）
+
+## A2UI 架构原则
+
+A2UI 采用 Headless Component 理念：交互原语与视觉表现分离。
+
+- **交互原语层（稳定）：** SingleChoice / MultipleChoice / FillInBlank / SocraticBranch。AI 模型只需知道这 4 种 tool schema。
+- **视觉层（可变）：** 每个 case 可以定制完全不同的视觉表现。新样式不需要改 AI 工具定义。
+- **数据契约层：** `{ type: "single_choice", selected: "B" }` 等标准格式，AI 只看这层。
+
+原语扩展时机：当新的交互模式的数据契约真正不同（如 Ordering 排序、Slider 连续值、Matching 配对）时才加，纯视觉变化不加新原语。
+
+## Demo Case 设计规范
+
+- 模拟 UI 内容要尽量真实，引导/教学文字放在模拟 UI 外面
+- 交互引导优先用视觉（dim + highlight、hotspot 脉冲点），避免文字指令
+- Continue 语义 = 这一步的交互完成了（不管对错），不卡用户
+- 答错后显示正确答案反馈，Continue 立刻可用
+- 最后一步用叙事动画做总结，不用大段文字
 
 ## 竞品调研
 
@@ -116,24 +142,7 @@ Key routing rules:
 
 ## 协作飞轮
 
-持续优化人机协作的闭环机制：
-
-### 任务前：方案选型检索
-涉及 UI/UX 实现、架构选型、工具选择等方案性问题时，先用 WebSearch 检索当前最佳实践，再结合项目实际情况给出建议。
-
-### 任务后：沉淀复盘
-每次任务完成后，主动评估是否有值得沉淀的内容，以表格形式向用户建议：
-
-| 沉淀内容 | 建议层级 | 理由 |
-|----------|---------|------|
-| 具体内容 | Memory / CLAUDE.md / Skill | 为什么值得沉淀 |
-
-用户确认后再执行写入。
-
-### 沉淀层级判断
-- **Memory**：个人偏好、一次性发现、上下文信息
-- **CLAUDE.md**：硬性规则、反复验证的工作流
-- **Skill**：一个模式被成功使用 2-3 次后，提炼为可复用的 Skill
+> 通用协作飞轮机制见全局 `~/.claude/CLAUDE.md`，此处仅补充项目特有的沉淀规则。
 
 ## Health Stack
 

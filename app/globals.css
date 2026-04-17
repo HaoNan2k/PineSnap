@@ -88,9 +88,9 @@
   --color-text-secondary: var(--text-secondary);
   
   /* Fonts */
-  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
-  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans: var(--font-plus-jakarta), "PingFang SC", "Noto Sans SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), "PingFang SC", "Noto Sans SC", ui-serif, Georgia, serif;
+  --font-display: var(--font-fraunces), "PingFang SC", "Noto Sans SC", ui-serif, Georgia, serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
   /* Acorn colors */
