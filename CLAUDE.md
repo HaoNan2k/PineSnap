@@ -90,25 +90,6 @@ PineSnap 是一个基于 React 的 AI 应用。
 - React（前端）
 - Next.js
 - TypeScript
-- Framer Motion（动画）
-
-## A2UI 架构原则
-
-A2UI 采用 Headless Component 理念：交互原语与视觉表现分离。
-
-- **交互原语层（稳定）：** SingleChoice / MultipleChoice / FillInBlank / SocraticBranch。AI 模型只需知道这 4 种 tool schema。
-- **视觉层（可变）：** 每个 case 可以定制完全不同的视觉表现。新样式不需要改 AI 工具定义。
-- **数据契约层：** `{ type: "single_choice", selected: "B" }` 等标准格式，AI 只看这层。
-
-原语扩展时机：当新的交互模式的数据契约真正不同（如 Ordering 排序、Slider 连续值、Matching 配对）时才加，纯视觉变化不加新原语。
-
-## Demo Case 设计规范
-
-- 模拟 UI 内容要尽量真实，引导/教学文字放在模拟 UI 外面
-- 交互引导优先用视觉（dim + highlight、hotspot 脉冲点），避免文字指令
-- Continue 语义 = 这一步的交互完成了（不管对错），不卡用户
-- 答错后显示正确答案反馈，Continue 立刻可用
-- 最后一步用叙事动画做总结，不用大段文字
 
 ## 竞品调研
 
