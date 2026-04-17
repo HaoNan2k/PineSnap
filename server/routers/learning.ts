@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import {
   createLearningForResources,
   getLearningWithAccessCheck,
+  getLearningStateLight,
   ensureLearningConversation,
   updateLearningClarify,
   updateLearningPlanWithClarify,
@@ -72,8 +73,8 @@ function getLearningContentFromResource(resource: {
  * Helper to get learning with access check, throws TRPCError on failure.
  * Avoids repeated code and non-null assertions.
  */
-async function getLearningOrThrow(learningId: string, userId: string) {
-  const result = await getLearningWithAccessCheck(learningId, userId);
+async function getLearningOrThrow(learningId: string, userId: string, options?: { includeContent?: boolean }) {
+  const result = await getLearningWithAccessCheck(learningId, userId, options);
   if (!result.ok) {
     throw new TRPCError({
       code: result.status === 403 ? "FORBIDDEN" : "NOT_FOUND",
@@ -180,22 +181,47 @@ export const learningRouter = router({
   getState: protectedProcedure
     .input(z.object({ learningId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const learning = await getLearningOrThrow(input.learningId, ctx.user.id);
+      const t0 = Date.now();
+      const result = await getLearningStateLight(input.learningId, ctx.user.id);
+      if (!result.ok) {
+        throw new TRPCError({
+          code: result.status === 403 ? "FORBIDDEN" : "NOT_FOUND",
+        });
+      }
+      const learning = result.learning;
+      const t1 = Date.now();
       const resources = learning.resources.map((item) => item.resource);
       const clarifyParsed = clarifyPayloadSchema.safeParse(learning.clarify);
       const clarify = clarifyParsed.success ? clarifyParsed.data : null;
 
-      const conversation = await ensureLearningConversation(
-        learning.id,
-        ctx.user.id
+      // Extract conversationId from already-fetched data, skip extra DB call
+      const existingConv = learning.conversations.find(
+        (lc) => lc.conversation.userId === ctx.user.id && !lc.conversation.deletedAt
       );
+      const conversation = existingConv
+        ? { id: existingConv.conversation.id }
+        : await ensureLearningConversation(learning.id, ctx.user.id);
+      const t2 = Date.now();
+
       const conversationWithMessages = await getConversation(
         conversation.id,
         ctx.user.id
       );
+      const t3 = Date.now();
       const initialMessages = conversationWithMessages
         ? await convertLearnDbToUIMessages(conversationWithMessages.messages)
         : [];
+      const t4 = Date.now();
+
+      console.info("[perf] learning.getState", {
+        learningId: input.learningId,
+        getLearningMs: t1 - t0,
+        ensureConvMs: t2 - t1,
+        getConvMs: t3 - t2,
+        convertMsgsMs: t4 - t3,
+        msgCount: conversationWithMessages?.messages.length ?? 0,
+        totalMs: t4 - t0,
+      });
 
       return {
         learning: {
