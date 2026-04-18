@@ -6,7 +6,7 @@
 - [ ] 1.4 生成 migration（`prisma migrate dev --name canvas-chat-split`），dev 数据库验证 schema 正确
 - [ ] 1.5 更新 `docs/platform/database-data-dictionary.md`，登记 `kind` 与 `anchoredCanvasMessageId` 字段定义
 - [ ] 1.6 给 `lib/db/conversation.ts` 加 `getCanvasConversation(learningId)` / `getOrCreateChatConversation(learningId, userId)` 方法（**复用现有 conversation CRUD**，不在 discussion.ts 重复造）
-- [ ] 1.6.1 `getOrCreateChatConversation` 防并发：用 `LearningConversation` 上 `(learningId, conversation.kind)` 唯一约束 + `ON CONFLICT DO NOTHING` + 重新 SELECT，确保两个并发请求只会创出一条 chat conversation
+- [ ] 1.6.1 `getOrCreateChatConversation` 防并发：在事务内 `SELECT pg_advisory_xact_lock(hashtext(learningId || '|' || userId || '|chat'))`，再 SELECT 现有 → 没有则创建。事务结束 lock 自释放。**不依赖 schema 约束**（Postgres 无法穿过 FK 引用 `Conversation.kind` 建唯一索引）
 - [ ] 1.7 新建 `lib/db/discussion.ts`：仅放 discussion 特有逻辑——`getDiscussionMessages(chatConversationId)` / `createDiscussionMessage({ chatConversationId, anchorMessageId, role, content })` / 不重新实现 conversation CRUD
 - [ ] 1.8 在 `createDiscussionMessage` 中实现 anchor 完整性 validator：校验 anchor message 属于同 learning 的 canvas conversation 且 role=assistant；不通过则抛错
 - [ ] 1.9 在 `lib/chat/types.ts` 新加共享 zod schema `DiscussionRequestBody`（含 learningId / anchorMessageId / input）；前后端**都用同一个 schema 验**
@@ -21,17 +21,13 @@
 - [ ] 2.5 添加 perf 日志：每次 discussion 请求记录 `chatHistoryMessageCount` 与 `totalContextTokens` 估算
 - [ ] 2.6 单元测试覆盖：context 注入正确（含整段 history）、不接受 tools、anchor 正确写入
 
-## 3. canvas tool-only 兜底与 abort 处理（Phase 2）
+## 3. ~~canvas tool-only 兜底与 abort 处理~~（Phase 2 已删除）
 
-- [ ] 3.1 在 `app/api/learn/chat/route.ts` 的 `toUIMessageStreamResponse` 配置 `consumeSseStream: consumeStream`（来自 `ai` 包）
-- [ ] 3.2 抽出独立纯函数 `handleStreamFinish({ isAborted, response, ctx })`，三条路径（abort / no-tool retry / happy path）在内部分流；route handler 只调一次
-- [ ] 3.3 abort 路径：软删除本轮已写入 user/tool message；不走任何持久化或 retry
-- [ ] 3.4 happy path（非 abort）下检测 response.messages 是否含 tool call；无则触发一次性 retry
-- [ ] 3.5 retry 仍失败 → 写入 fallback presentContent（错误提示文案）走 createMessage 流程
-- [ ] 3.6 前端识别 abort response，展示"网络中断，请重试"提示并允许用户重新提交
-- [ ] 3.7 添加日志：abort 次数、retry 触发次数、fallback 触发次数
-- [ ] 3.8 单元测试覆盖 `handleStreamFinish` 三条路径：abort 路径不写、无 tool 路径触发 retry、happy path 正常写
-- [ ] 3.9 给 streamText 调用配置 timeout 上限（建议 60s 与 maxDuration 对齐），防止 client 断开后 LLM 仍在烧 token 无限生成
+> **本组任务在 outside voice review 后被砍掉**。理由：pre-PMF 阶段，"canvas conversation 永远干净"是个纪律目标，不是技术目标——新架构下 chat 走另一个 endpoint，canvas endpoint 唯一的 trailing user 来源是 abort，桌面 + 稳定网络下一周不到一次。先靠 manual SQL 兜偶发的脏数据；真到高频再做 abort + retry 的状态机。
+>
+> 同时 outside voice 验证：现有 `/api/learn/chat` 已配 `toolChoice: "required"`（canvas-tool-redesign 完成），SDK 强制已经 80% 解决问题。剩下的 20%（模型偶尔违反）走前端 fallback 提示"AI 没有出题，请刷新重试"——零工程成本。
+>
+> 如果未来发现需要 abort + retry，参考 spike 验证：retry 必须放在 `createUIMessageStream({ execute })` 内部，**不能**放在 `streamText.onFinish`。
 
 ## 4. tRPC schema 与 getState 升级（Phase 2）
 
@@ -70,15 +66,20 @@
 - [ ] 7.1 在 dev 模拟一次 multi-step round（让模型连续 emit 2 个 presentContent），验证前端正确渲染为 2 页 previous
 - [ ] 7.2 添加测试覆盖：useChat messages 数组中连续多条 assistant message 的 step 计算与显示
 
-## 8. 旧脏数据清理（Phase 4）
+## 8. 旧脏数据清理（Phase 4 - 简化为手写 SQL）
 
-- [ ] 8.1 实现 `scripts/cleanup-orphan-conversations.ts`：扫描所有 `kind=canvas` Conversation，从尾向前清理连续 user/tool message 链
-- [ ] 8.2 dry-run 模式：仅输出 report 不写库；report 写到 `scripts/cleanup-report-{timestamp}.json`
-- [ ] 8.3 执行模式：软删除（设 `deletedAt`），并写 audit log
-- [ ] 8.4 单元测试覆盖：正常会话不动、单条孤立、user+tool 双尾、streak（4 条）、019bdc0c 实际形态
-- [ ] 8.5 `package.json` 加 `pnpm cleanup:orphan-conversations` 与 `pnpm cleanup:orphan-conversations -- --dry-run` 命令
-- [ ] 8.6 cleanup 脚本支持 batch 处理（默认每批 200 条 conversation）+ 进度日志，避免一次性吃光 DB connection 或内存
-- [ ] 8.7 cleanup 扫描时**仅遍历有 deletedAt IS NULL message 的活跃 conversation**，跳过已全部软删的
+> **本组从工具化降级为一条 SQL**。理由：DB 中只有一条已知卡死会话（019bdc0c），写整套脚本是过度工程。规模上来后再用工具。
+
+- [ ] 8.1 手写 SQL 软删除 019bdc0c 末尾的孤立 message [13][14]：
+  ```sql
+  UPDATE "Message"
+  SET "deletedAt" = now()
+  WHERE "conversationId" = '019bdc0c-8207-77ba-9914-44409c64c36f'
+    AND id IN (SELECT id FROM "Message" WHERE ... ORDER BY "createdAt" DESC LIMIT 2);
+  ```
+  执行前先 SELECT 确认目标行；执行后刷新 019bdc0c 页面验证 canvas 能正常显示
+- [ ] 8.2 在 `docs/incidents/` 建一个 `019bdc0c-cleanup.md` 记录这次清理的精确 SQL + 执行时间 + 验证结果，留作未来追溯
+- [ ] 8.3 监控：一旦发现 DB 有第 2、3、4 条同类脏数据出现，再回头讨论"是否值得做工具化"
 
 ## 9. 验证与测试
 
@@ -87,14 +88,14 @@
 - [ ] 9.3 翻 canvas previous，**确认 sidebar 内容不变**（解耦验证）
 - [ ] 9.4 在历史 step 时提问，确认 anchor 仍是 latest（不是 displayed）
 - [ ] 9.5 多 step 后再提问，确认 AI 能引用前面 step 的讨论（跨 step 上下文验证）
-- [ ] 9.6 模拟 stream abort（dev tools 断网），确认 user message 被回滚、UI 显示重试提示
-- [ ] 9.7 模拟 model 不调 tool（临时改 prompt 让它输出纯文本），确认 retry 触发；连续两次失败时 fallback presentContent 出现
-- [ ] 9.8 跑 cleanup 脚本 dry-run，确认 019bdc0c 在 report 里
-- [ ] 9.9 跑 cleanup 脚本实际执行，刷新 019bdc0c 页面，确认 canvas 能正常显示并支持继续学习
-- [ ] 9.10 关闭 feature flag 重新 build，确认旧 chat drawer 仍可工作（回滚演练）
-- [ ] 9.11 双 useChat 并发测试：canvas 在 streaming 时点开 sidebar 提问，确认互不阻塞；反之亦然
-- [ ] 9.12 lazy creation race 测试：模拟两个并发 discussion 请求同时来（同一 learning，无现有 chat conversation），确认 DB 中只创出一条 chat conversation（要么 unique constraint 兜底、要么 advisory lock）
-- [ ] 9.13 跨 step AI 引用 eval：脚本化跑 5 道连续学习 + 跨 step 引用提问；用 LLM-as-judge 评分 AI 回复是否准确接住"你之前说 X"类型的问题（参考 chat-storage 的 eval pattern，如有）
+- [ ] 9.6 模拟 model 不调 tool（临时改 prompt 让它输出纯文本），确认前端 fallback 卡片渲染（"AI 没能生成下一步，重试吗"），点击重试能继续
+- [ ] 9.7 执行 manual SQL 清理 019bdc0c（参见 task 8.1），刷新页面确认 canvas 能正常显示
+- [ ] 9.8 关闭 feature flag 重新 build，确认旧 chat drawer 仍可工作（回滚演练）
+- [ ] 9.9 双 useChat 并发测试：canvas 在 streaming 时点开 sidebar 提问，确认互不阻塞；反之亦然
+- [ ] 9.10 lazy creation race 测试：模拟两个并发 discussion 请求同时来（同一 learning + user，无现有 chat conversation），确认 DB 中只创出一条 chat conversation（advisory lock 验证）
+- [ ] 9.11 跨 step AI 引用 eval：脚本化跑 5 道连续学习 + 跨 step 引用提问；用 LLM-as-judge 评分 AI 回复是否准确接住"你之前说 X"类型的问题
+- [ ] 9.12 anchor disclosure 验证：每条 user message 旁应显示"在 step N 时问的"小字
+- [ ] 9.13 dangling anchor 验证：手动软删一条 canvas message，确认 anchor 指向它的 chat message 仍正常渲染（不报错），只是无 disclosure 显示
 
 ## 10. 文档与收尾
 

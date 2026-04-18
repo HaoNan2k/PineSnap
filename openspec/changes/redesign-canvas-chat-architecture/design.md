@@ -131,8 +131,8 @@ Answer the user's questions about the material. You can reference earlier steps 
 **Token cost 控制**：
 - canvas history 只放每 step 的题目主题（短摘要），不放 tool args 全文
 - chat conversation 全量回放——这是 Light Anchor 决策的代价，必须接受
-- 当 chat 增长到一定量级（比如单 learning > 100 条 message），开始显式截断或滑窗摘要——但不在 P0 做
-- P0 加日志：每次 discussion 请求记录 `chatHistoryMessageCount` 与 `totalContextTokens`，便于后续观测决定何时上 token 优化
+- **阈值调早**：单 learning chat message 中位数 **> 8-10 条** 就开始考虑滑窗摘要（不是 outside voice 之前估计的 50 条）。理由：500 message × 100 token = 50K token / 请求；GPT-5.2 input $3/M 下单次 $0.15；50 个问题/学习 = $7.5。1000 DAU × 10 q/天 = $30K/月——这个 budget 在 PMF 后会 hurt
+- P0 加日志：每次 discussion 请求记录 `chatHistoryMessageCount` 与 `totalContextTokens`（估算），便于后续观测决定何时上 token 优化
 
 **为什么不复用 `/api/learn/chat` + 模式开关**：
 - 行为差异大（一个必须用 tool、一个禁止用 tool；不同 system prompt）
@@ -191,89 +191,43 @@ Answer the user's questions about the material. You can reference earlier steps 
 
 实施时验证：在 dev 模拟一次 multi-step round（比如让模型连续 emit 2 个 presentContent），确认前端正确渲染为 2 页 previous。
 
-### 6. canvas tool-only 服务端兜底
+### 6 + 7. ~~canvas tool-only 兜底 / abort 路径处理~~（已删除）
 
-**决策**：在 `/api/learn/chat` 的 streamText `onFinish` 里检测：若 `isAborted=false` 且 response 不含任何 tool call，记 error 日志 + 一次性 retry（重发上一个 user message 给模型）。retry 仍失败 → 写入 fallback presentContent message（"系统暂时无法生成下一步，请稍后再试或刷新"）。
+> **outside voice review 后砍掉**。理由：
+>
+> 1. **`toolChoice: "required"` 已经解决 ~80% 的 tool-only 问题**（canvas-tool-redesign change 已实施）。剩下的偶发违反用前端 fallback 卡片（"AI 没能生成下一步，重试吗"）处理，零工程成本。
+>
+> 2. **abort 回滚的实际触发频率极低**。桌面 + 稳定网络下一周不到一次。pre-PMF 为它写完整状态机不值得——靠 manual SQL 兜历史脏数据更务实。
+>
+> 3. **spike 验证到的技术事实**：service-side retry 必须放在 `createUIMessageStream({ execute })` 内部（async 串行调用多次 streamText + writer.merge），**不能**放在 streamText 的 onFinish 里（onFinish 触发时 SSE 可能已关）。将来如重启此功能，按这个 pattern 实现。
+>
+> **保留**：前端 fallback UI（detect 无 tool call 的 assistant message 并显示重试卡），详见 assisted-learning-loop spec。
 
-**关键约束**：retry 逻辑**仅在 `isAborted=false` 时执行**。abort 路径不走 retry（见 §7）。代码上这两条路径必须在 onFinish 入口处用 `if (isAborted) { ... return }` 显式分流。
+### 8. 旧脏数据：手写 SQL（简化版）
 
-**为什么需要兜底**：
-- `toolChoice: "required"` 是 SDK 层强制，但模型仍可能违反（OpenAI/Anthropic 偶发现象）
-- 不兜底 → canvas 状态卡住，用户看见骨架屏
-- retry 1 次是经验值，再多容易循环烧 token
+**决策**：只对已知的一条脏会话 `019bdc0c-8207-77ba-9914-44409c64c36f` 执行手写 SQL 软删除末尾的 [13][14] 两条 message。操作记录到 `docs/incidents/019bdc0c-cleanup.md`。
 
-**和 0002 的关系**：0002 警告 onFinish 在 abort 时不触发；加上 `consumeStream` 后会触发，但 isAborted=true。兜底 retry 仅覆盖"正常 finish 但 response 不合规"场景。
+**SQL 骨架**（精确执行前先 SELECT 确认）：
 
-### 7. abort 路径处理
-
-**决策**：在 `result.toUIMessageStreamResponse({ consumeSseStream: consumeStream })` 配置 `consumeStream`（来自 `ai` 包），确保 abort 时 onFinish 仍触发，并通过 `isAborted=true` 区分。
-
-**isAborted 时的行为**（onFinish 入口处先 check 这个 flag）：
-- ✗ 不再写任何 assistant message
-- ✗ 不走 §6 的 tool-only 兜底 retry
-- ✓ 软删除本轮已写入的 user/tool message（在 LLM 调用前写的那条）
-- ✓ 客户端检测到 abort response → 弹出"网络中断，请重试"提示并允许用户再次提交
-
-**为什么需要回滚 user input**：
-- canvas conversation 严格 step 化的前提是任何"半轮"都不留下
-- 不回滚 → 下次进页面又是末尾孤立 user 消息 → 退化回 0002 的卡死场景
-
-**实现关键代码骨架**：
-
-```ts
-onFinish: async ({ response, isAborted }) => {
-  if (isAborted) {
-    // path A: rollback user input, no further work
-    await softDeleteMessage(currentUserMessageId)
-    return
-  }
-  const hasToolCall = response.messages.some(m => /* check */ )
-  if (!hasToolCall) {
-    // path B: retry once
-    const retryResult = await retryStreamText(...)
-    if (!hasToolCall(retryResult)) {
-      await persistFallbackPresentContent()
-    } else {
-      await persistMessages(retryResult.messages)
-    }
-    return
-  }
-  // path C: happy path
-  await persistMessages(response.messages)
-}
+```sql
+UPDATE "Message"
+SET "deletedAt" = now()
+WHERE "conversationId" = '019bdc0c-8207-77ba-9914-44409c64c36f'
+  AND id IN (
+    SELECT id FROM "Message"
+    WHERE "conversationId" = '019bdc0c-8207-77ba-9914-44409c64c36f'
+      AND "deletedAt" IS NULL
+    ORDER BY "createdAt" DESC
+    LIMIT 2
+  );
 ```
 
-三条路径互斥，各自独立测试。
+**不写脚本的理由**：
+1. 已知脏数据只有 1 条——工具化是过度工程
+2. 脚本运行时撞上活跃用户会误删正在进行的写入（outside voice 指出）——避免这种风险
+3. 2+ 条同类脏数据出现再讨论工具化
 
-### 8. 旧脏数据清理
-
-**决策**：一次性脚本 `scripts/cleanup-orphan-conversations.ts`：
-- 扫描所有 `kind=canvas` conversation
-- 算法：从尾向前找连续的 user/tool message 链（直到遇到 assistant 为止），全部软删除
-- 因此 streak 场景（多次失败造成的多条孤立尾巴）也能正确处理
-- 每条处理记录写入 `scripts/cleanup-report-{timestamp}.json` 用于回滚审计
-- 提供 `--dry-run` 模式只输出报告不写库
-
-**算法 pseudo-code**：
-
-```
-for each canvas conversation:
-  msgs = messages where deletedAt IS NULL ORDER BY createdAt
-  trailing = []
-  for msg in reverse(msgs):
-    if msg.role == 'assistant': break
-    trailing.append(msg)
-  if trailing not empty:
-    log to report
-    if not dry_run: soft delete all in trailing
-```
-
-**测试用例必须覆盖**：
-1. 正常会话（末尾是 assistant）→ 不动
-2. 末尾单条孤立 user → 软删 1 条
-3. 末尾 user + tool（用户答了 quiz 但 AI 没回）→ 软删 2 条
-4. 多次失败 streak（user, tool, user, tool）→ 软删 4 条
-5. 19bdc0c 这条会话的实际形态（end with assistant text + user text）→ 软删 2 条
+**验证**：SQL 执行后刷新 019bdc0c URL，canvas 应能正常显示当前 step 而非骨架屏。
 
 ## Risks / Trade-offs
 
@@ -282,9 +236,11 @@ for each canvas conversation:
 - **两条 conversation 增加 query 复杂度** → 用 tRPC 一次性聚合输出，前端只看一个聚合 state
 - **sidebar 默认收起，用户可能根本发现不了** → 初次进入 learning 时 onboarding tooltip 提示一次（不在本 change scope，留作 follow-up）
 - **canvas 兜底重生成可能产生不一致内容**（同一题被生成两次但答案不同）→ 兜底只在"无 tool call"时触发，模型已经吐过 token 的内容会被丢弃；用户感知是"加载稍长一点"
-- **abort 回滚 user input 可能让用户感觉"我刚才的答案怎么没了"** → 前端在回滚后立刻 re-render 原 step 的 quiz（用户的本地 state 还在），用户看到的是"按钮可点"而不是"答案消失"；流畅恢复
 - **anchor validator 多一次 query** → discussion 写入频率本来就低，多 1 query/写入可接受；将来如成为热点，可改为 join + 一次 query 完成校验 + 写入
 - **getDiscussion 一次拉全量** → MVP 不分页，长 learning（>500 chat messages）需要 pagination；spec 暂记 future work
+- **多 tab 同时打开同一 learning** → 已知 limitation，MVP 不处理一致性；用户感知可能是 message 重复或缺失。前端如果感知到双 tab 会检测但不阻止；文档中明确标注
+- **cross-stream anchor race**（用户提问瞬间 canvas 正好推进）→ 通过 sidebar 给 user message 加轻量"在 step N 时问的" disclosure 让这种 race 至少 user-visible
+- **回滚到 anchor-filtered 模式的真实成本** → design.md §1 说的"加 sidebar filter toggle 即可"低估了真实代价。Filter toggle 只是 UI；**AI context 注入逻辑需要全部重写**（从 full chat history → per-step anchored chat history），prompt 模板也要改。从 Light Anchor 退到 anchor-filtered 不是小改动，是半天工作量。记录在案以便未来决策时不被"低估"误导
 
 ## Migration Plan
 
@@ -296,29 +252,22 @@ for each canvas conversation:
 5. 新建 `/api/learn/discussion/route.ts`，独立 endpoint（暂未被前端调用）
 6. `lib/learn/prompts/discussion-system-prompt.ts`
 
-**Phase 2 · canvas tool-only 加固 + abort 处理**
-1. 在 `/api/learn/chat` 加 `consumeSseStream: consumeStream`
-2. onFinish 检测无 tool → retry 一次 → fallback presentContent
-3. abort path 回滚 user input
-4. 前端处理 abort response（提示 + 允许重试）
+**~~Phase 2~~** ：已删除（详见 §6+§7）。outside voice 后改为前端 fallback 卡片，零工程成本。
 
-**Phase 3 · 前端 UI 重构**
+**Phase 2（重新编号自 Phase 3） · 前端 UI 重构**
 1. 删除 `chat-drawer.tsx` + `toDisplayMessages`
 2. 新增 `discussion-sidebar.tsx`、`canvas-step-navigation.tsx`
-3. `learn-focus.tsx` 改为双 useChat 实例
-4. step 状态管理 + sidebar 同步
+3. `learn-focus.tsx` 改为双 useChat 实例（discussion 抽到 `use-discussion-chat.ts` hook）
+4. canvas previous 导航（与 sidebar 解耦）
 
-**Phase 4 · 旧数据清理**
-1. 实现 cleanup script
-2. dry-run 跑一遍，输出 report
-3. 人工 review report
-4. 实跑（或决定保留）
+**Phase 3（重新编号自 Phase 4） · 已知脏数据手写 SQL 清理**
+1. 部署前执行 `docs/incidents/019bdc0c-cleanup.md` 中记录的 SQL
+2. 验证刷新 019bdc0c URL 能正常打开
 
 **Rollback**：
 - Phase 1（schema migration）**不可回滚**——只新增字段，向后兼容，但一旦写入新数据就回不去。可接受，因为字段独立、无破坏性
-- Phase 2（abort + retry）独立 endpoint 行为，可通过 git revert 单独回退
-- Phase 3（前端 UI）通过 feature flag `NEXT_PUBLIC_ENABLE_DISCUSSION_SIDEBAR` 包裹。Flag off → 回退到旧 chat drawer + 旧 LearnFocus 状态管理。**注意**：flag 只能回滚前端，回滚不了 Phase 1+2 的服务端变更
-- Phase 4（脏数据清理）通过 dry-run + 软删除实现可逆——任何被误删的 message 通过 `UPDATE messages SET deletedAt = NULL WHERE ...` 恢复，依赖 cleanup-report 文件做精确回滚
+- Phase 2（前端 UI）通过 feature flag `NEXT_PUBLIC_ENABLE_DISCUSSION_SIDEBAR` 包裹。Flag off → 回退到旧 chat drawer + 旧 LearnFocus 状态管理。**注意**：flag 只能回滚前端，回滚不了 Phase 1 的服务端变更
+- Phase 3（手写 SQL 清理）通过软删除实现可逆——`UPDATE Message SET deletedAt = NULL WHERE id IN (...)` 恢复
 
 ## Open Questions
 

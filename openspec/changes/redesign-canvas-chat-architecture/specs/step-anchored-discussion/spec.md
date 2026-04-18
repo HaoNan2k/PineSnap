@@ -45,6 +45,31 @@
 - **THEN** 系统 MUST 校验该 message 的 role 为 `assistant`
 - **AND** 不满足时抛错
 
+#### Scenario: anchor 必须指向未软删的 message
+- **WHEN** `createDiscussionMessage` 接收 `anchorMessageId`
+- **THEN** 系统 MUST 校验该 message 的 `deletedAt IS NULL`
+- **AND** 不满足时抛错（防止 chat anchor 写到未来可能被清理的 canvas message 上）
+
+### Requirement: Frontend handles dangling anchor gracefully
+若 chat message 的 anchor 指向的 canvas message 后来被软删（运营操作或脚本清理），UI SHALL 仍能正常显示该 chat message（不报错），仅以"无 anchor"形式呈现。
+
+#### Scenario: anchor 找不到时降级显示
+- **WHEN** 前端读取 chat message 列表
+- **AND** 某条 message 的 `anchoredCanvasMessageId` 在当前 canvas messages 中找不到（被软删）
+- **THEN** 该 message MUST 仍正常渲染
+- **AND** 该 message 的 anchor 元数据 MUST 视为 null（不显示 disclosure 小字）
+
+### Requirement: Discussion messages show anchor step disclosure
+UI SHALL 在 sidebar 内每条 user message 旁显示一个轻量 disclosure（如"在 step N 时问的"小字 / hover tooltip），帮助用户在跨 step 引用时定位上下文。
+
+**理由**：cross-stream race（用户提问的瞬间 canvas 正好推进到下一步）会让 anchor 元数据"看起来不对"。显式 disclosure 让这种 race 至少有 user-visible 线索可排查；同时帮助用户回顾"我当时在哪一步问的"。
+
+#### Scenario: user message 显示 anchor 标签
+- **WHEN** sidebar 渲染一条 user 角色的 chat message
+- **AND** 该 message 的 anchor 指向某个有效 canvas message
+- **THEN** UI MUST 在该 message 旁显示一个轻量标签（小字、低对比度），形如 "在 step N 时问的"，N 是 anchor 对应的 canvas step 序号
+- **AND** 标签 MUST 不抢主信息流的视觉权重
+
 ### Requirement: Discussion AI endpoint is isolated from canvas AI
 系统 SHALL 通过独立的 `/api/learn/discussion` endpoint 处理讨论请求，与 canvas 的 `/api/learn/chat` 完全分离。讨论 endpoint MUST NOT 接受任何 tool 参数；模型物理上无法调用 tool。
 

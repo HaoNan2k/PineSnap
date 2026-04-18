@@ -36,29 +36,17 @@
 - **AND** 按 `createdAt` ASC 排序
 - **AND** anchor 字段作为元数据返回，但不作为查询条件
 
-### Requirement: Cleanup orphan trailing messages from canvas conversations
-系统 SHALL 提供一次性数据清理脚本（`scripts/cleanup-orphan-conversations.ts`），扫描所有 `kind=canvas` 的 Conversation，识别**末尾连续**的 `role=user` 或 `role=tool` message 链（直到遇到 `role=assistant` 为止），并全部软删除（设置 `deletedAt`）。
+### Requirement: Existing orphan canvas messages are cleaned via manual SQL
+对于本 change 上线时已存在的"末尾是孤立 user/tool message"的脏 canvas conversation（已知一条：`019bdc0c-8207-77ba-9914-44409c64c36f`），系统 SHALL 通过一次性手写 SQL 软删除（`UPDATE Message SET deletedAt = now() WHERE ...`），并将操作记录在 `docs/incidents/019bdc0c-cleanup.md`。
 
-#### Scenario: 算法处理 trailing user/tool 链
-- **WHEN** 脚本扫描某 canvas conversation 的 messages（按 createdAt asc，filtered by deletedAt IS NULL）
-- **THEN** 脚本 MUST 从尾向前找连续的 user/tool message
-- **AND** 遇到第一条 assistant 时停止
-- **AND** 这些找到的 user/tool message 全部软删除
+**说明**：outside voice review 后从工具化降级为手写 SQL。理由：当前已知脏数据仅 1 条；写整套脚本是 over-engineering。如未来发现 2+ 条同类脏数据，再讨论工具化。
 
-#### Scenario: 多次失败 streak 也能清
-- **WHEN** 某 conversation 末尾形如 `[..., assistant, user, tool, user, tool]`（多次失败造成）
-- **THEN** 脚本 MUST 软删除所有 4 条尾巴 user/tool message
+#### Scenario: 手写 SQL 软删除
+- **WHEN** 部署本 change 至生产前
+- **THEN** 操作员 MUST 执行手写 SQL（详见 tasks.md task 8.1）软删除已知脏 message
+- **AND** MUST 在 `docs/incidents/019bdc0c-cleanup.md` 记录精确 SQL + 执行时间 + 验证结果
 
-#### Scenario: 软删除而非物理删除
-- **WHEN** 脚本执行清理
-- **THEN** MUST 通过设置 `deletedAt` 软删除
-- **AND** MUST NOT 物理删除（DELETE FROM）
-
-#### Scenario: dry-run 模式
-- **WHEN** 脚本以 `--dry-run` flag 运行
-- **THEN** MUST 输出 report 但不写 DB
-
-#### Scenario: 输出 report
-- **WHEN** 脚本运行（dry-run 或实跑）
-- **THEN** MUST 在 `scripts/cleanup-report-{timestamp}.json` 输出每条清理记录（learningId, conversationId, messageId, role, parts 概要）
-- **AND** 报告 MUST 支持人工 review 与回滚
+#### Scenario: 验证清理生效
+- **WHEN** 手写 SQL 执行完毕
+- **THEN** 刷新 019bdc0c learning URL
+- **AND** canvas MUST 正常显示（不再卡在骨架屏）
