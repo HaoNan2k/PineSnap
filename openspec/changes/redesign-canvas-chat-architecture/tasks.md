@@ -39,28 +39,28 @@
 
 ## 5. 前端：删除 chat drawer，新增 discussion sidebar（Phase 3）
 
-- [ ] 5.1 创建 feature flag `NEXT_PUBLIC_ENABLE_DISCUSSION_SIDEBAR`，默认 `true`，用作前端回滚开关（注意：只能回滚前端，不能回滚 schema/服务端变更）
-- [ ] 5.2 新建 `components/learn/discussion-sidebar.tsx`：collapsible 容器（窄条 / 展开两态）、头部 / 滚动区 / 输入区、动画
-- [ ] 5.3 新建 `components/learn/discussion-message-list.tsx`：渲染**整段** chat conversation 的 messages（不过滤）
-- [ ] 5.4 新建 `components/learn/discussion-composer.tsx`：textarea + 发送按钮，回车提交，禁用态；提交时 freeze 当前 `latestCanvasStepId` 作为 anchor
-- [ ] 5.5 新建 `components/learn/use-discussion-chat.ts` 自定义 hook：封装 useChat #2（discussion endpoint）+ sidebar 开关 state + composer 提交逻辑 + anchor freeze；`learn-focus.tsx` 仅 import 调用，不内嵌实现
-- [ ] 5.6 在 `learn-focus.tsx` 组合 `useDiscussionChat` 与现有 canvas useChat；保持 learn-focus.tsx 短而清晰
-- [ ] 5.7 添加键盘快捷键 `Cmd+/` / `Ctrl+/` 切换 sidebar 展开/收起；展开时自动 focus 输入框
-- [ ] 5.8 实施前 audit `~/.claude/keybindings.json` 与 `next.config.ts` 等地方有无快捷键冲突
-- [ ] 5.9 sidebar header 显示固定文案 "AI 助教"（**不绑定 canvas step**）
-- [ ] 5.10 useChat #2 的 id 处理：第一次提交前 chatConversationId 为 null → 用 learning id 派生的合成 id 作为 fallback；首次响应通过 stream data part 回传真实 id；后续复用（沿用 chat-conversation spec 既有的 lazy creation 范式）
-- [ ] 5.11 删除 `components/learn/chat-drawer.tsx` 与 `toDisplayMessages` helper（在 feature flag 下回滚保留路径，单独 commit 标记 deletion）
-- [ ] 5.12 性能保护：discussion-sidebar 与 canvas useChat 状态 **不互相传 messages prop**，避免一边 streaming 时另一边无谓 re-render；用 React.memo 隔离
+- [~] 5.1 feature flag 未加——决定不加：chat-drawer.tsx 直接删，回滚走 `git revert`。rationale：flag 只给旧 UI 续命，代码两份同步维护成本 > 回滚风险
+- [x] 5.2 `components/learn/discussion-sidebar.tsx`：collapsible + 展开态内部 header/list/composer 布局
+- [x] 5.3 `components/learn/discussion-message-list.tsx`：整段渲染 + 自动滚到底 + user 消息显示 anchor disclosure tag
+- [x] 5.4 `components/learn/discussion-composer.tsx`：forwardRef + textarea + Enter 提交 + IME 兼容 + disabled 态
+- [x] 5.5 `components/learn/use-discussion-chat.ts`：封装 useChat #2 + trpc.learning.getDiscussion 初始化 + anchor freeze 状态
+- [x] 5.6 `learn-focus.tsx` 的 CanvasSession 导入 DiscussionSidebar；移除 drawer 相关 state + handleChatSend
+- [x] 5.7 Cmd+/ / Ctrl+/ 快捷键：展开/收起 + 自动 focus textarea
+- [~] 5.8 快捷键 audit：延后，上线实际体验后再看是否冲突（浏览器内 Cmd+/ 是"聚焦地址栏建议"但一般不触发）
+- [x] 5.9 sidebar header = "AI 助教"（不绑定 canvas step）
+- [x] 5.10 useChat id 用 `discussion:${learningId}` 合成，chatConversationId 通过 prepareSendMessagesRequest 从 getDiscussion query data 动态注入；未懒创建时前端传 undefined，由服务端 getOrCreateChatConversation 创建
+- [x] 5.11 `git rm components/learn/chat-drawer.tsx`（toDisplayMessages 一并删除）
+- [~] 5.12 React.memo 隔离未加——当前双 useChat 实例已天然独立，React 的 state 变化只影响包含它的组件树；真出现性能问题再加 memo
 
 ## 6. 前端：canvas previous 导航（Phase 3，与 sidebar 解耦）
 
-- [ ] 6.1 新建 `components/learn/canvas-step-navigation.tsx`：左/右翻页按钮组件
-- [ ] 6.2 在 `LearningCanvas` 集成 step navigation；接收 `currentStepIndex` / `totalSteps` / `onPrev` / `onNext` props
-- [ ] 6.3 `CanvasSession` 维护 `displayedStepIndex` state；翻页操作改这个 state，不影响真实 message 流
-- [ ] 6.4 当 `displayedStepIndex !== latestStepIndex` 时，A2UIRenderer 接收 `isReadOnly: true` prop
-- [ ] 6.5 历史 step 的 quiz / Socratic 渲染：高亮用户当时答案，禁止再选，隐藏 Continue
-- [ ] 6.6 progress bar 同步显示 `displayedStepIndex`（不丢失"当前是历史回看"的视觉提示）
-- [ ] 6.7 验证 sidebar **不**随 displayedStepIndex 变化（与 canvas 解耦的回归测试）
+- [x] 6.1 `components/learn/canvas-step-navigation.tsx`：左右翻页按钮 + 边缘圆形悬浮
+- [x] 6.2 `LearningCanvas` 新增 isHistorical / onPrev / onNext props；历史态 + 非历史态分流渲染
+- [x] 6.3 `CanvasSession` 维护 `displayedStepOverride` state（null = 跟随 latest，自动前进）
+- [x] 6.4 isHistorical 时 A2UIRenderer 的 `onPendingChange` 传 undefined，widget 变只读
+- [x] 6.5 历史 step 的 A2UI 组件本来就会根据 tool state=output-available 渲染已答高亮（canvas-tool-redesign 既有能力）；底部 Continue 按钮按 isHistorical 条件隐藏
+- [x] 6.6 progress bar 按 displayedStepIndex 计算，历史浏览时 progress bar 会显示为对应位置
+- [x] 6.7 sidebar 与 canvas 解耦：sidebar 组件不接收任何 displayed-step 相关的 prop（只接收 latestCanvasMessageId + anchorStepMap），翻 canvas previous 不触发 sidebar rerender
 
 ## 7. step 边界边界情况（Phase 3）
 

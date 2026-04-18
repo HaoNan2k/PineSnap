@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc/react";
 import type { ChatPart } from "@/lib/chat/types";
 import type { ClarifyAnswer, ClarifyQuestion } from "@/lib/learn/clarify";
 import { LearningCanvas } from "@/components/learn/learning-canvas";
-import { ChatDrawer, toDisplayMessages } from "@/components/learn/chat-drawer";
+import { DiscussionSidebar } from "@/components/learn/discussion-sidebar";
 import {
   getLastStepFingerprint,
   getToolInvocationsFromLastStep,
@@ -155,7 +155,7 @@ export function LearnFocus({ learningId }: LearnFocusProps) {
 }
 
 // ---------------------------------------------------------------------------
-// CanvasSession — orchestrates LearningCanvas + ChatDrawer
+// CanvasSession — orchestrates LearningCanvas + DiscussionSidebar
 // ---------------------------------------------------------------------------
 
 function CanvasSession({
@@ -167,11 +167,14 @@ function CanvasSession({
   conversationId: string;
   initialMessages: UIMessage[];
 }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [chatInput, setChatInput] = useState("");
+  // Overrides the latest step when user navigates previous; null means "follow latest".
+  const [displayedStepOverride, setDisplayedStepOverride] = useState<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const inflightMessageIdRef = useRef<string | null>(null);
   const [timeoutFiredForId, setTimeoutFiredForId] = useState<string | null>(null);
+
+  // Pending tool results: toolCallId -> output (undefined means not ready)
+  const [pendingResults, setPendingResults] = useState<Map<string, unknown>>(new Map());
 
   const transport = useMemo(
     () =>
@@ -222,7 +225,7 @@ function CanvasSession({
     [conversationId, learningId]
   );
 
-  const { messages, sendMessage, status, addToolResult } = useChat({
+  const { messages, status, addToolResult } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
@@ -304,81 +307,141 @@ function CanvasSession({
     !lastAssistantHasOutput &&
     (status === "error" || inflightTimedOut);
 
-  // Build current canvas step from last assistant message
-  const currentStep = useMemo(() => {
-    if (!lastMessage || lastMessage.role !== "assistant") return null;
+  const isGated = shouldGateLatestAssistant && !shouldShowError;
 
-    let content = "";
-    if (lastMessage.parts && lastMessage.parts.length > 0) {
-      const textParts = lastMessage.parts.filter(
-        (p): p is Extract<typeof p, { type: "text" }> => p.type === "text"
-      );
-      content = textParts.map((p) => p.text).join("\n");
-    } else if (hasContent(lastMessage)) {
-      content = lastMessage.content;
+  // Get tool invocations from last assistant message
+  const currentToolInvocations = useMemo(() => {
+    if (!lastMessage || lastMessage.role !== "assistant") return [];
+    return getToolInvocationsFromLastStep(lastMessage.parts);
+  }, [lastMessage]);
+
+  // Reset pending results when a new step arrives
+  const lastMessageId = lastMessage?.id;
+  const prevMessageIdRef = useRef<string | undefined>(undefined);
+  if (lastMessageId !== prevMessageIdRef.current) {
+    prevMessageIdRef.current = lastMessageId;
+    if (pendingResults.size > 0) {
+      setPendingResults(new Map());
     }
+  }
 
-    const a2uiInvocations = getToolInvocationsFromLastStep(lastMessage.parts);
-    const isGated = shouldGateLatestAssistant && !shouldShowError;
+  // Determine if Continue can be clicked:
+  // All non-server tool invocations that aren't already submitted must have a pending result
+  const canContinue = useMemo(() => {
+    if (isBusy || isGated || shouldShowError) return false;
+    const pendingTools = currentToolInvocations.filter((t) => !t.isReadOnly);
+    if (pendingTools.length === 0) return false;
+    return pendingTools.every((t) => pendingResults.has(t.toolCallId));
+  }, [isBusy, isGated, shouldShowError, currentToolInvocations, pendingResults]);
 
-    return {
-      id: lastMessage.id,
-      content,
-      parts: lastMessage.parts,
-      hasA2UI: a2uiInvocations.length > 0,
-      isGated,
-      isError: shouldShowError,
-    };
-  }, [lastMessage, shouldGateLatestAssistant, shouldShowError]);
+  // Handle pending value changes from A2UI components
+  const handlePendingChange = useCallback(
+    (toolCallId: string, value: unknown | undefined) => {
+      setPendingResults((prev) => {
+        const next = new Map(prev);
+        if (value === undefined) {
+          next.delete(toolCallId);
+        } else {
+          next.set(toolCallId, value);
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   // Count assistant messages as "steps"
   const assistantMessages = useMemo(
     () => messages.filter((m) => m.role === "assistant"),
     [messages]
   );
-  const currentStepIndex = assistantMessages.length - 1;
+  const latestStepIndex = Math.max(assistantMessages.length - 1, 0);
 
-  // Chat drawer messages
-  const displayMessages = useMemo(() => toDisplayMessages(messages), [messages]);
+  // Displayed step = user-chosen override OR latest. When user is on latest
+  // and a new assistant message arrives, displayedStepOverride stays null
+  // so displayedStepIndex auto-tracks latest.
+  const displayedStepIndex = displayedStepOverride ?? latestStepIndex;
+  const isHistorical = displayedStepIndex < latestStepIndex;
 
-  const handleContinue = async () => {
-    if (isBusy) return;
-    await sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: "Continue" }],
+  // Historical step uses its own assistant message's tools.
+  const displayedAssistantMessage =
+    assistantMessages[displayedStepIndex] ?? null;
+  const displayedToolInvocations = useMemo(() => {
+    if (!displayedAssistantMessage) return [];
+    return getToolInvocationsFromLastStep(displayedAssistantMessage.parts);
+  }, [displayedAssistantMessage]);
+
+  // Latest canvas assistant message id — used as anchor freeze source for
+  // discussion submissions (Light Anchor).
+  const latestCanvasMessageId =
+    assistantMessages[latestStepIndex]?.id ?? null;
+
+  // Build anchor step map for sidebar disclosure tags.
+  const anchorStepMap = useMemo(() => {
+    const m = new Map<string, number>();
+    assistantMessages.forEach((msg, idx) => m.set(msg.id, idx + 1));
+    return m;
+  }, [assistantMessages]);
+
+  const handleContinue = useCallback(() => {
+    if (!canContinue) return;
+
+    // Submit all pending tool results
+    for (const [toolCallId, output] of pendingResults) {
+      const tool = currentToolInvocations.find((t) => t.toolCallId === toolCallId);
+      if (tool) {
+        addToolResult({
+          tool: tool.toolName,
+          toolCallId,
+          output,
+        });
+      }
+    }
+
+    setPendingResults(new Map());
+  }, [canContinue, pendingResults, currentToolInvocations, addToolResult]);
+
+  const handlePrev = useCallback(() => {
+    setDisplayedStepOverride((prev) => {
+      const base = prev ?? latestStepIndex;
+      return Math.max(0, base - 1);
     });
-  };
+  }, [latestStepIndex]);
 
-  const handleChatSend = async () => {
-    if (!chatInput.trim() || isBusy) return;
-    const content = chatInput.trim();
-    setChatInput("");
-    await sendMessage({
-      role: "user",
-      parts: [{ type: "text", text: content }],
+  const handleNext = useCallback(() => {
+    setDisplayedStepOverride((prev) => {
+      if (prev === null) return prev;
+      const nextIdx = prev + 1;
+      // If user navigates back to current latest, clear override so future
+      // assistant messages auto-scroll them.
+      return nextIdx >= latestStepIndex ? null : nextIdx;
     });
-  };
+  }, [latestStepIndex]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-background">
+    <div className="flex flex-row h-full w-full bg-background">
       <LearningCanvas
-        currentStep={currentStep}
+        toolInvocations={
+          isHistorical ? displayedToolInvocations : currentToolInvocations
+        }
+        parts={displayedAssistantMessage?.parts ?? lastMessage?.parts}
         totalSteps={Math.max(assistantMessages.length, 1)}
-        currentStepIndex={Math.max(currentStepIndex, 0)}
+        currentStepIndex={displayedStepIndex}
+        isHistorical={isHistorical}
         isBusy={isBusy}
+        canContinue={!isHistorical && canContinue}
         onContinue={handleContinue}
-        onOpenDrawer={() => setDrawerOpen(true)}
-        addToolResult={addToolResult}
+        onPrev={handlePrev}
+        onNext={handleNext}
+        addToolResult={isHistorical ? undefined : addToolResult}
+        onPendingChange={isHistorical ? undefined : handlePendingChange}
+        isGated={!isHistorical && isGated}
+        isError={!isHistorical && shouldShowError}
       />
-      <ChatDrawer
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        messages={displayMessages}
-        input={chatInput}
-        onInputChange={setChatInput}
-        onSend={handleChatSend}
-        isBusy={isBusy}
-        addToolResult={addToolResult}
+      <DiscussionSidebar
+        learningId={learningId}
+        latestCanvasMessageId={latestCanvasMessageId}
+        anchorStepMap={anchorStepMap}
       />
     </div>
   );
