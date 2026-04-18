@@ -15,12 +15,12 @@
 
 ## 2. Discussion endpoint 与 prompt（Phase 1）
 
-- [ ] 2.1 新建 `lib/learn/prompts/discussion-system-prompt.ts`：起草 prompt 文本；至少含 1 个 negative example（"我已经为你点了下一题"这种话不要说）；含 canvas history 摘要的 template hole
-- [ ] 2.2 新建 `app/api/learn/discussion/route.ts`：接收 `DiscussionRequestBody`（用 1.9 的共享 schema）；校验、注入 context（**整段 chat history + canvas step 地图**）、调用 streamText（`tools: undefined`）
-- [ ] 2.3 服务端把请求体携带的 `anchorMessageId` 写入 message 的 `anchoredCanvasMessageId`（**信任客户端 freeze 的 anchor，不重推断**）
-- [ ] 2.4 服务端 onFinish 内原子写 user message + assistant response（用 `prisma.$transaction`）；abort 时不写
-- [ ] 2.5 添加 perf 日志：每次 discussion 请求记录 `chatHistoryMessageCount` 与 `totalContextTokens` 估算
-- [ ] 2.6 单元测试覆盖：context 注入正确（含整段 history）、不接受 tools、anchor 正确写入
+- [x] 2.1 新建 `lib/learn/prompts/discussion-system-prompt.ts`：含 negative example（"我已经为你点了下一题"）+ canvas step 地图 template
+- [x] 2.2 新建 `app/api/learn/discussion/route.ts`：用 `discussionRequestBodySchema` 验证；注入 system prompt + 整段 discussion history；streamText 用空 tools 对象
+- [x] 2.3 服务端把请求体携带的 `anchorMessageId` 写入 message 的 `anchoredCanvasMessageId`（信任客户端 freeze）
+- [x] 2.4 服务端 onFinish 内 `prisma.$transaction` 原子写 user message + assistant response；isAborted=true 时直接 return 不写
+- [~] 2.5 perf 日志的 `chatHistoryMessageCount` / `totalContextTokens` 暂未实现，留 task 9.x 验证后补
+- [~] 2.6 单元测试同 1.10：测试框架未搭，已通过 verify-discussion-validator.ts 覆盖 anchor 写入；context 注入和无 tools 的验证留给 task 9.x 手动跑
 
 ## 3. ~~canvas tool-only 兜底与 abort 处理~~（Phase 2 已删除）
 
