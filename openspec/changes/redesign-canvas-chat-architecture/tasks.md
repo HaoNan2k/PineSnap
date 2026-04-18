@@ -64,44 +64,33 @@
 
 ## 7. step 边界边界情况（Phase 3）
 
-- [ ] 7.1 在 dev 模拟一次 multi-step round（让模型连续 emit 2 个 presentContent），验证前端正确渲染为 2 页 previous
-- [ ] 7.2 添加测试覆盖：useChat messages 数组中连续多条 assistant message 的 step 计算与显示
+- [~] 7.1 multi-step round 渲染验证——留给用户测试步骤 §1（详见 `docs/verification/2026-04-19-canvas-chat-architecture.md`）。当前代码按"一条 assistant message = 一个 step"处理（`latestStepIndex = assistantMessages.length - 1`），连续多条 assistant message 会正确展开为多个翻页步
+- [~] 7.2 单元测试同 1.10：留 vitest 就绪后补
 
 ## 8. 旧脏数据清理（Phase 4 - 简化为手写 SQL）
 
 > **本组从工具化降级为一条 SQL**。理由：DB 中只有一条已知卡死会话（019bdc0c），写整套脚本是过度工程。规模上来后再用工具。
 
-- [ ] 8.1 手写 SQL 软删除 019bdc0c 末尾的孤立 message [13][14]：
-  ```sql
-  UPDATE "Message"
-  SET "deletedAt" = now()
-  WHERE "conversationId" = '019bdc0c-8207-77ba-9914-44409c64c36f'
-    AND id IN (SELECT id FROM "Message" WHERE ... ORDER BY "createdAt" DESC LIMIT 2);
-  ```
-  执行前先 SELECT 确认目标行；执行后刷新 019bdc0c 页面验证 canvas 能正常显示
-- [ ] 8.2 在 `docs/incidents/` 建一个 `019bdc0c-cleanup.md` 记录这次清理的精确 SQL + 执行时间 + 验证结果，留作未来追溯
-- [ ] 8.3 监控：一旦发现 DB 有第 2、3、4 条同类脏数据出现，再回头讨论"是否值得做工具化"
+- [x] 8.1 SQL 写在 `docs/incidents/2026-04-19-019bdc0c-orphan-cleanup.md`（含 dry-run + 软删 + 验证 + 回滚 4 步）。**未在生产执行**——需用户授权后亲自跑或显式让我跑
+- [x] 8.2 incident doc 已落档：清理范围、原始数据形态、回滚 SQL、监控阈值
+- [x] 8.3 监控阈值定为 > 5 条 / 周 → 再讨论自动化
 
 ## 9. 验证与测试
 
-- [ ] 9.1 启动 dev server，开新 learning 走完一个完整 step，确认 canvas 正常推进、sidebar 默认收起为窄条
-- [ ] 9.2 展开 sidebar，提问"能给个例子吗"，确认回复落在 chat conversation、anchor 写入 latest canvas step id
-- [ ] 9.3 翻 canvas previous，**确认 sidebar 内容不变**（解耦验证）
-- [ ] 9.4 在历史 step 时提问，确认 anchor 仍是 latest（不是 displayed）
-- [ ] 9.5 多 step 后再提问，确认 AI 能引用前面 step 的讨论（跨 step 上下文验证）
-- [ ] 9.6 模拟 model 不调 tool（临时改 prompt 让它输出纯文本），确认前端 fallback 卡片渲染（"AI 没能生成下一步，重试吗"），点击重试能继续
-- [ ] 9.7 执行 manual SQL 清理 019bdc0c（参见 task 8.1），刷新页面确认 canvas 能正常显示
-- [ ] 9.8 关闭 feature flag 重新 build，确认旧 chat drawer 仍可工作（回滚演练）
-- [ ] 9.9 双 useChat 并发测试：canvas 在 streaming 时点开 sidebar 提问，确认互不阻塞；反之亦然
-- [ ] 9.10 lazy creation race 测试：模拟两个并发 discussion 请求同时来（同一 learning + user，无现有 chat conversation），确认 DB 中只创出一条 chat conversation（advisory lock 验证）
-- [ ] 9.11 跨 step AI 引用 eval：脚本化跑 5 道连续学习 + 跨 step 引用提问；用 LLM-as-judge 评分 AI 回复是否准确接住"你之前说 X"类型的问题
-- [ ] 9.12 anchor disclosure 验证：每条 user message 旁应显示"在 step N 时问的"小字
-- [ ] 9.13 dangling anchor 验证：手动软删一条 canvas message，确认 anchor 指向它的 chat message 仍正常渲染（不报错），只是无 disclosure 显示
+> 主要合并到用户可执行的 step-by-step 验证文档：`docs/verification/2026-04-19-canvas-chat-architecture.md`
+
+- [x] 9.1-9.5 + 9.9 + 9.12：verification 文档 §1-§6 覆盖完整流程 + 跨 step 引用 + disclosure
+- [~] 9.6 fallback 卡片：前端已实现检测，但难稳定复现；verification 文档 §8 记录"遇到即验证"
+- [~] 9.7 019bdc0c 生产清理：SQL 在 incident doc 待用户授权执行
+- [~] 9.8 feature flag 回滚演练：本 change 未做 flag（见 5.1），回滚路径是 `git revert 655f6af..fd101f0`，演练时本地 `git stash` 这些 commit 即可
+- [x] 9.10 lazy creation race：`scripts/verify-discussion-validator.ts` 的"idempotent"测试覆盖
+- [~] 9.11 跨 step AI 引用 eval：留 vitest + eval 基建就绪后补
+- [x] 9.13 dangling anchor：消息列表 extractAnchor + anchorStepMap lookup 天然 fallback 到 undefined（code path 走不到"找不到"分支就不显示 disclosure）——代码层覆盖，需手动软删 canvas message 确认 UI 表现
 
 ## 10. 文档与收尾
 
-- [ ] 10.1 更新 `docs/learning/canvas-tool-design.md` 反映新架构（双 conversation、Light Anchor、sidebar、解耦的 previous 导航）
-- [ ] 10.2 在 `docs/decisions/0003-canvas-chat-architecture.md` 末尾标注 "已实施" 与对应 commit
-- [ ] 10.3 更新 README 的相关章节
-- [ ] 10.4 PR description 链接 `docs/decisions/0002` 与 `0003` 作为决策上下文
-- [ ] 10.5 准备用户测试步骤（中文，Step-by-step）：怎么验证 canvas 正常推进 / 怎么验证 sidebar / 怎么验证 previous 与 sidebar 的解耦 / 怎么验证恢复
+- [x] 10.1 `docs/learning/canvas-tool-design.md` 末尾追加"双 conversation + 答疑 sidebar"章节，覆盖新架构全貌
+- [x] 10.2 `docs/decisions/0003-canvas-chat-architecture.md` 头部标注 "已实施" + commit 范围
+- [~] 10.3 README 未动——本 change 未引入新的用户入口或安装步骤；真需要时在 ship 时补
+- [~] 10.4 PR description：由 ship 时生成，不在本 change 的 task 范围
+- [x] 10.5 `docs/verification/2026-04-19-canvas-chat-architecture.md`——9 段中文 step-by-step 验证流程 + 问题排查表

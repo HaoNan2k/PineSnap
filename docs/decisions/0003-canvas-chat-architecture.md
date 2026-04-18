@@ -1,9 +1,10 @@
 # 0003 · Canvas + Chat 架构重设计
 
-> 状态：**产品方向已确定，技术实施待 openspec 提案**
-> 日期：2026-04-18
+> 状态：**已实施**（commits `fd101f0..655f6af`，2026-04-19）。生产 SQL 清理 019bdc0c 待用户授权执行（`docs/incidents/2026-04-19-019bdc0c-orphan-cleanup.md`）
+> 日期：2026-04-18 决策 / 2026-04-19 落地
 > 分支：feat/learning-experience
 > 衍生自：[0002 · Canvas 学习会话的中断恢复策略](./0002-canvas-conversation-recovery-strategy.md)
+> 实施提案：[openspec/changes/redesign-canvas-chat-architecture/](../../openspec/changes/redesign-canvas-chat-architecture/)
 
 ---
 
