@@ -43,13 +43,14 @@
 
 previous 不是一个独立的"目录页"，是 canvas 自带的左右翻页能力。
 
-### 1.3 chat 是独立 conversation，与 canvas 解耦
+### 1.3 chat 是独立 conversation，与 canvas 解耦（Light Anchor 模式）
 
 - 一个 learning 持有 **两条 conversation**：
   - **canvas conversation**：严格 tool-only
-  - **chat conversation**：自由文本对话
-- chat 消息 **anchored 到** canvas 的某一个 step
-- chat AI 可读 canvas 当前 step 的内容作为 context，但**不能改 canvas 进度**
+  - **chat conversation**：自由文本对话，**整段全局**（一条 conversation 容纳整个 learning 的所有讨论）
+- chat 消息携带 **anchor 元数据**（用户提问时所在的 canvas step），但 **UI 默认不按 anchor 过滤**——sidebar 显示完整时间线
+- chat AI **天然看见整段讨论 + canvas 历史地图**，跨 step 引用对它免费
+- chat AI **不能改 canvas 进度**
 
 数据模型示意：
 
@@ -62,19 +63,25 @@ learning
   │     ├──         tool result
   │     └── ...
   │
-  └── chat conversation (kind=chat)
-        ├── msg: { anchored_to: canvas.step_2, role: user, "能给个例子吗" }
-        ├── msg: { anchored_to: canvas.step_2, role: assistant, "比如有个 users 表..." }
-        └── ...
+  └── chat conversation (kind=chat) ← 一条，按时间线展开
+        ├── msg: { anchored_to: canvas.step_1, role: user, "anon_key 安全吗" }
+        ├── msg: { anchored_to: canvas.step_1, role: assistant, "..." }
+        ├── msg: { anchored_to: canvas.step_5, role: user, "back to anon_key..." }
+        └── msg: { anchored_to: canvas.step_5, role: assistant, "..." }
 ```
+
+**为什么是 Light Anchor 而不是 anchor-driven UI**（关键设计决策）：
+- 学习场景下用户经常需要 AI 跨 step 关联（"你之前说 X，这道题是不是同样问题"）。如果 sidebar 按 anchor 切换显示，AI 也只看当前 step → 失去 cross-step 上下文 → 答疑质量降级
+- Flat sidebar + AI 看全量讨论 = 用户认知最轻 + AI 答疑质量最高
+- Anchor 字段保留作为**元数据**，未来如果用户反馈"想看当时这步讨论了啥"，加 sidebar filter toggle 即可，不动 schema
 
 ### 1.4 UI：右侧 collapsible sidebar
 
 - **默认**：满屏 canvas + 右侧一条窄竖条（"?" icon），可发现但不入侵
 - **触发**：点窄条 / 快捷键（建议 `Cmd+/` 或 `Cmd+K`）→ 侧边栏从右侧展开
 - **侧边栏内部布局**（从上到下）：
-  - 顶部 header：显示"关于「当前 step 标题」"
-  - 中间：scroll 区，当前 step 锚定的讨论历史
+  - 顶部 header：显示"AI 助教"或学习主题（**不绑定 canvas step**）
+  - 中间：scroll 区，整段讨论按时间线展开（最旧在上、最新在下、自动滚到底）
   - 底部：输入框（**贴在 sidebar 内部最底，不在屏幕底部**）
 - **canvas 永远不被压缩**——sidebar 占用宽度但不挤压 canvas 内容（canvas 不 resize）
 
@@ -90,22 +97,21 @@ ASCII 示意：
 
 展开状态：
 ┌──────────────────────────────┬─────────────┐
-│                              │ 关于「RLS」< │
+│                              │ AI 助教   <  │
 │                              ├─────────────┤
 │       CANVAS                 │  讨论历史    │
+│                              │  （整段）    │
 │                              │   ↕ 滚动     │
-│                              │              │
 │                              ├─────────────┤
 │                              │ 问什么... [↑]│
 └──────────────────────────────┴─────────────┘
 ```
 
-### 1.5 切 step 时 sidebar 自动跟随
+### 1.5 canvas 与 sidebar 完全解耦
 
-- 用户翻 previous → sidebar header 同步切换为"关于上一步的题"
-- 中间区域显示锚定到那一步的讨论历史
-- 没讨论的 step 显示空状态："这一步没问过问题"
-- 输入框依然可用，可以补问
+- 用户翻 previous 看历史 step 时，**sidebar 不切换内容**，依然是整段讨论时间线
+- canvas previous 是纯前端 UI 状态，不影响 chat 状态
+- 解耦带来的好处：两个功能可以独立开发、独立测试、独立 ship
 
 ### 1.6 移动端
 
@@ -123,22 +129,22 @@ ASCII 示意：
 
 他不确定，不想随便点。鼠标移到 "?" 窄条 → 点开。
 
-侧边栏滑出，header 写着"关于「RLS 限制的对象」"，中间空空，底部一个输入框。他打字："能给个例子吗"。
+侧边栏滑出，header 写着"AI 助教"，中间空空（这是新 learning，还没问过），底部一个输入框。他打字："能给个例子吗"。
 
 AI 在侧边栏里流式回答："比如有个 users 表，每行是一个用户的资料..."。
 
 他读完，**题还在 canvas 原位**。他点了"能"。canvas 滑到下一步：单选题"以下哪些做法是安全的"。
 
-侧边栏 header 自动变成"关于「下一题」"，**中间清空**——上一题的讨论被绑定在上一题，不打扰他现在做新题。
+**侧边栏不动**——他刚才那段讨论还在，不会消失。他可以继续问"刚才说的 anon_key 在这道题里怎么处理"，AI 因为看着完整对话，能直接接住。
 
-他想回看刚才那道 Socratic 是怎么讨论的——点 canvas 左侧的箭头翻 previous。canvas 回到 Socratic 题，**侧边栏同步刷新**为之前那段对话。一目了然。
+学到第 5 题，他想回看 Socratic 题——点 canvas 左侧的箭头翻 previous。canvas 回到 Socratic 题。**侧边栏纹丝不动**——它不绑 canvas step，永远是这次学习的完整对话流。
 
 ### 2.2 关键的"问 ≠ 答"
 
 - **答题**（点选项 / 选 yes-no / 填空 widget 提交）→ 进 canvas history，是正式一步
-- **提问**（在 sidebar 输入框打字）→ 进 chat history，挂在当前 step 下
+- **提问**（在 sidebar 输入框打字）→ 进 chat history（携带 anchor 元数据，记录用户当时在哪一步）
 
-系统区分这两件事，用户不需要区分。
+系统区分这两件事，用户不需要区分。anchor 元数据当下不影响 UI，留给未来可能的分析或 filter 功能。
 
 ### 2.3 输入框的语义
 
@@ -183,13 +189,15 @@ PineSnap 在 canvas 区域**没有通用输入框**。所有"打字"都发生在
 
 **初步倾向**：chat AI **只能输出 text**（不带 tool 调用能力），完全只回答问题，不染指 canvas 状态。
 
-### 4.3 chat AI 能见的范围
+### 4.3 chat AI 能见的范围（已定）
 
-- 只见当前 step 锚定的讨论？
-- 见这个 learning 整段 chat 历史？
-- 见 canvas 整段 history？
+**Light Anchor 模式下**：chat AI 看见**整段 chat conversation**（天然跨 step）+ canvas 整段 history 的**地图摘要**（每个 step 的题目主题，不含完整 tool args）。
 
-**初步倾向**：见当前 step 锚定的讨论 + canvas 整段 history（只读）。这样它能回答"上一步那个 X 是什么意思"这种跨 step 的问题。
+不在 P0 做的优化：
+- prior step 讨论的逐条全文注入（token 太贵）
+- 智能召回（按当前问题语义检索相关 prior 讨论）
+
+如果后期 chat 对话量很大导致 token 飞了，再做 prior 讨论的滑窗摘要。
 
 ### 4.4 token 预算
 

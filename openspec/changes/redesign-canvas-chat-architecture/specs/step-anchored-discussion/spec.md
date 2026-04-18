@@ -5,8 +5,8 @@
 
 #### Scenario: Learning 持有两条 conversation
 - **WHEN** 用户首次访问一个 learning
-- **THEN** 系统 MUST 确保该 learning 同时关联到一条 `kind=canvas` 的 Conversation 与一条 `kind=chat` 的 Conversation
-- **AND** 任一 conversation 缺失时 MUST 自动创建并关联
+- **THEN** 系统 MUST 确保该 learning 关联恰好一条 `kind=canvas` Conversation
+- **AND** 用户首次提问时 MUST 懒创建恰好一条 `kind=chat` Conversation 并关联
 
 #### Scenario: 不同 conversation 的 message 不混淆
 - **WHEN** 服务端接收 `/api/learn/chat` 的请求
@@ -14,19 +14,36 @@
 - **WHEN** 服务端接收 `/api/learn/discussion` 的请求
 - **THEN** 写入的 message MUST 落在 `kind=chat` 的 Conversation 上
 
-### Requirement: Discussion messages are anchored to canvas steps
-系统 SHALL 为每条 chat conversation 的消息标注其讨论所针对的 canvas step。每条 chat message MUST 通过 `anchoredCanvasMessageId` 字段引用 canvas conversation 的某条 assistant message（即一个 step）。
+### Requirement: Discussion messages carry anchor metadata
+系统 SHALL 为每条 chat conversation 的 message 记录其发起时用户所在的 canvas step。每条 chat message MUST 通过 `anchoredCanvasMessageId` 字段引用 canvas conversation 中**最新一条** assistant message（即用户提问那一刻所在的 step）。
+
+**Anchor 在本期是元数据**，不影响默认 UI 显示和 AI context 注入；保留它为未来可能的 filter / 分析功能。
 
 #### Scenario: 用户在某 step 提问时锚定该 step
-- **WHEN** 用户在 canvas 当前停留在 step N（对应 canvas conversation 的某条 assistant message id `M`）
-- **AND** 用户通过 sidebar 提问
-- **THEN** 系统 MUST 将该提问的 chat message 的 `anchoredCanvasMessageId` 设为 `M`
-- **AND** 后续的 assistant 回复也 MUST 锚定到同一 `M`
+- **WHEN** 用户当前 canvas latest step 对应 assistant message id `M`
+- **AND** 用户通过 sidebar 提交一条 discussion 请求
+- **THEN** 请求体 MUST 携带 `anchorMessageId: M`（**客户端 freeze**，不让服务端重推断）
+- **AND** 服务端 MUST 把该提问及对应 AI 回复的 `anchoredCanvasMessageId` 设为 `M`
 
-#### Scenario: 切换 step 后锚定切换
-- **WHEN** 用户翻 previous 到 step N-1（对应 canvas message id `M-1`）
-- **AND** 用户在该 step 提问
-- **THEN** 新提问的 chat message MUST 锚定到 `M-1`，不影响 step N 上已有的讨论锚定关系
+#### Scenario: 翻看历史时提问仍 anchor 到 latest
+- **WHEN** 用户在 canvas 上翻 previous 看历史 step（displayedStepIndex < latestStepIndex）
+- **AND** 用户在 sidebar 提交提问
+- **THEN** anchor MUST 仍是 latest step 的 assistant message id（不是 displayed 的）
+- **AND** 表达"用户在最新 step 状态下临时回看时提的问"
+
+### Requirement: Anchor integrity is enforced at write time
+系统 SHALL 在写入 chat message 时校验 anchor 完整性。校验失败的写入 MUST 失败并报错。
+
+#### Scenario: anchor 必须指向同 learning 的 canvas conversation
+- **WHEN** `createDiscussionMessage` 接收 `anchorMessageId`
+- **THEN** 系统 MUST 校验该 message 所属 conversation 的 kind 为 `canvas`
+- **AND** 该 canvas conversation 与目标 chat conversation 必须属于同一 learning
+- **AND** 任一条件不满足 MUST 抛错（5xx），不允许写入
+
+#### Scenario: anchor 必须指向 assistant message
+- **WHEN** `createDiscussionMessage` 接收 `anchorMessageId`
+- **THEN** 系统 MUST 校验该 message 的 role 为 `assistant`
+- **AND** 不满足时抛错
 
 ### Requirement: Discussion AI endpoint is isolated from canvas AI
 系统 SHALL 通过独立的 `/api/learn/discussion` endpoint 处理讨论请求，与 canvas 的 `/api/learn/chat` 完全分离。讨论 endpoint MUST NOT 接受任何 tool 参数；模型物理上无法调用 tool。
@@ -40,20 +57,23 @@
 - **WHEN** 构建 discussion 请求的 messages 数组
 - **THEN** system prompt MUST 来自 `lib/learn/prompts/discussion-system-prompt.ts`，不复用 canvas 的 prompt
 
-### Requirement: Discussion AI receives canvas context as read-only input
-系统 SHALL 在 discussion endpoint 调用 LLM 时注入以下 context：当前 canvas step 的内容、canvas 历史 step 的简要摘要、当前 step 已有的 chat history。Context 注入方式为 inline 在 system prompt 中，模型无法主动获取超出范围的内容。
+### Requirement: Discussion AI sees full chat history and canvas map
+系统 SHALL 在 discussion endpoint 调用 LLM 时注入：完整 chat conversation 历史（所有 message，无 anchor 过滤）+ canvas conversation 的 step 地图摘要（每 step 的题目主题）。
 
-#### Scenario: 注入当前 step
+#### Scenario: 注入完整 chat history
 - **WHEN** discussion endpoint 处理请求
-- **THEN** system prompt MUST 包含当前 canvas step 的题目/内容/选项
+- **THEN** messages 数组 MUST 包含该 chat conversation 的全部历史 message（按 createdAt asc）
+- **AND** MUST NOT 按 anchor 过滤
 
-#### Scenario: 注入历史 step 摘要
+#### Scenario: 注入 canvas history 地图
 - **WHEN** discussion endpoint 处理请求
-- **THEN** system prompt MUST 包含 canvas 历史 step 的有序摘要（最少：每步的题目主题）
+- **THEN** system prompt MUST 包含 canvas 全 step 的简要地图（每 step 的题目主题，如"step 3: RLS 行级安全"）
+- **AND** MUST NOT 把 canvas tool args 全文注入（控成本）
 
-#### Scenario: 注入当前 step 的 chat 历史
-- **WHEN** discussion endpoint 处理请求
-- **THEN** messages 数组 MUST 包含锚定到当前 step 的所有 chat history
+#### Scenario: 监控 token 成本
+- **WHEN** discussion 请求处理完毕
+- **THEN** 服务端 MUST 记录日志包含：`chatHistoryMessageCount` 与 `totalContextTokens`（估算）
+- **AND** 用于后续观察是否需要加 token 优化策略
 
 ### Requirement: Discussion AI cannot affect canvas progression
 系统 SHALL 保证 discussion AI 的回复永远不会改变 canvas conversation 的状态。Discussion 的输出 MUST 仅写入 `kind=chat` 的 Conversation。
@@ -67,16 +87,3 @@
 - **WHEN** discussion AI 在文本中说类似"我已经为你点了下一题"或试图模拟 tool call 输出
 - **THEN** 系统 MUST 忽略此类指令性表述（仅作为文本展示）
 - **AND** canvas 状态 MUST 保持不变
-
-### Requirement: Sidebar discussion view follows current canvas step
-UI SHALL 在用户切换 canvas step 时，自动刷新 sidebar 显示的讨论历史为锚定到当前 step 的消息列表。
-
-#### Scenario: 翻 previous 时 sidebar 同步
-- **WHEN** 用户在 canvas 翻到 step N-1
-- **THEN** sidebar 的 header MUST 显示"关于「step N-1 的题目主题」"
-- **AND** sidebar 的滚动区 MUST 显示锚定到 step N-1 的所有 chat messages
-
-#### Scenario: 没有讨论的 step 显示空状态
-- **WHEN** 用户翻到的 step 没有任何 chat message 锚定
-- **THEN** sidebar 滚动区 MUST 显示空状态文案（例如"这一步还没问过问题"）
-- **AND** 输入框 MUST 仍可用，用户可以补问

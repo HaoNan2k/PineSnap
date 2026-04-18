@@ -27,29 +27,38 @@
 - **WHEN** Prisma schema 应用迁移后
 - **THEN** `anchoredCanvasMessageId` 字段 MUST 有索引，以支持按 anchor 高效查询
 
-### Requirement: Query messages anchored to a specific canvas step
-系统 SHALL 提供按 `anchoredCanvasMessageId` 过滤 chat messages 的 DB 方法（位于 `lib/db/discussion.ts`），返回按 `createdAt` 升序的消息列表。
+### Requirement: Query full discussion conversation
+系统 SHALL 提供按 `chatConversationId` 拉取整段 chat 消息的 DB 方法（位于 `lib/db/discussion.ts`），返回按 `createdAt` 升序的消息列表（不按 anchor 过滤）。
 
-#### Scenario: 按 anchor 拉取讨论
-- **WHEN** 调用 `getDiscussionByAnchor(canvasMessageId)`
-- **THEN** MUST 返回所有 `anchoredCanvasMessageId = canvasMessageId` 且 `deletedAt IS NULL` 的 messages
+#### Scenario: 拉取整段讨论
+- **WHEN** 调用 `getDiscussionMessages(chatConversationId)`
+- **THEN** MUST 返回该 conversation 所有 `deletedAt IS NULL` 的 messages
 - **AND** 按 `createdAt` ASC 排序
+- **AND** anchor 字段作为元数据返回，但不作为查询条件
 
 ### Requirement: Cleanup orphan trailing messages from canvas conversations
-系统 SHALL 提供一次性数据清理脚本（`scripts/cleanup-orphan-conversations.ts`），扫描所有 `kind=canvas` 的 Conversation，识别末尾是 `role=user` 或 `role=tool` 且无后续 `role=assistant` message 的会话，并将这些孤立尾巴软删除（设置 `deletedAt`）。
+系统 SHALL 提供一次性数据清理脚本（`scripts/cleanup-orphan-conversations.ts`），扫描所有 `kind=canvas` 的 Conversation，识别**末尾连续**的 `role=user` 或 `role=tool` message 链（直到遇到 `role=assistant` 为止），并全部软删除（设置 `deletedAt`）。
 
-#### Scenario: 识别孤立尾巴
-- **WHEN** 脚本扫描某个 canvas conversation
-- **AND** 该会话最后一条 message 的 role 为 user 或 tool
-- **AND** 之后没有任何 deletedAt IS NULL 的 message
-- **THEN** 脚本 MUST 将该尾巴 message 标记为待清理
+#### Scenario: 算法处理 trailing user/tool 链
+- **WHEN** 脚本扫描某 canvas conversation 的 messages（按 createdAt asc，filtered by deletedAt IS NULL）
+- **THEN** 脚本 MUST 从尾向前找连续的 user/tool message
+- **AND** 遇到第一条 assistant 时停止
+- **AND** 这些找到的 user/tool message 全部软删除
+
+#### Scenario: 多次失败 streak 也能清
+- **WHEN** 某 conversation 末尾形如 `[..., assistant, user, tool, user, tool]`（多次失败造成）
+- **THEN** 脚本 MUST 软删除所有 4 条尾巴 user/tool message
 
 #### Scenario: 软删除而非物理删除
 - **WHEN** 脚本执行清理
 - **THEN** MUST 通过设置 `deletedAt` 软删除
 - **AND** MUST NOT 物理删除（DELETE FROM）
 
+#### Scenario: dry-run 模式
+- **WHEN** 脚本以 `--dry-run` flag 运行
+- **THEN** MUST 输出 report 但不写 DB
+
 #### Scenario: 输出 report
-- **WHEN** 脚本运行
+- **WHEN** 脚本运行（dry-run 或实跑）
 - **THEN** MUST 在 `scripts/cleanup-report-{timestamp}.json` 输出每条清理记录（learningId, conversationId, messageId, role, parts 概要）
 - **AND** 报告 MUST 支持人工 review 与回滚
