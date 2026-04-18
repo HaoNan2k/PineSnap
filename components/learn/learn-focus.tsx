@@ -225,7 +225,7 @@ function CanvasSession({
     [conversationId, learningId]
   );
 
-  const { messages, status, addToolResult } = useChat({
+  const { messages, status, addToolResult, sendMessage } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
@@ -325,12 +325,13 @@ function CanvasSession({
     }
   }
 
-  // Determine if Continue can be clicked:
-  // All non-server tool invocations that aren't already submitted must have a pending result
+  // Continue is clickable when:
+  // - no pending A2UI tools (empty canvas → kickoff first step; or pure-text step → advance)
+  // - all pending A2UI tools have a user-supplied result
   const canContinue = useMemo(() => {
     if (isBusy || isGated || shouldShowError) return false;
     const pendingTools = currentToolInvocations.filter((t) => !t.isReadOnly);
-    if (pendingTools.length === 0) return false;
+    if (pendingTools.length === 0) return true;
     return pendingTools.every((t) => pendingResults.has(t.toolCallId));
   }, [isBusy, isGated, shouldShowError, currentToolInvocations, pendingResults]);
 
@@ -372,9 +373,16 @@ function CanvasSession({
   }, [displayedAssistantMessage]);
 
   // Latest canvas assistant message id — used as anchor freeze source for
-  // discussion submissions (Light Anchor).
-  const latestCanvasMessageId =
-    assistantMessages[latestStepIndex]?.id ?? null;
+  // discussion submissions (Light Anchor). Skip the streaming placeholder
+  // (empty parts + nanoid id) so sidebar submits always anchor to a
+  // fully-persisted canvas step with a DB UUID.
+  const latestCanvasMessageId = useMemo(() => {
+    for (let i = assistantMessages.length - 1; i >= 0; i--) {
+      const msg = assistantMessages[i];
+      if (msg.parts && msg.parts.length > 0) return msg.id;
+    }
+    return null;
+  }, [assistantMessages]);
 
   // Build anchor step map for sidebar disclosure tags.
   const anchorStepMap = useMemo(() => {
@@ -386,7 +394,13 @@ function CanvasSession({
   const handleContinue = useCallback(() => {
     if (!canContinue) return;
 
-    // Submit all pending tool results
+    const pendingTools = currentToolInvocations.filter((t) => !t.isReadOnly);
+    if (pendingTools.length === 0) {
+      // Empty canvas or pure-text step — a user "Continue" turn drives the stream.
+      sendMessage({ role: "user", parts: [{ type: "text", text: "Continue" }] });
+      return;
+    }
+
     for (const [toolCallId, output] of pendingResults) {
       const tool = currentToolInvocations.find((t) => t.toolCallId === toolCallId);
       if (tool) {
@@ -399,7 +413,7 @@ function CanvasSession({
     }
 
     setPendingResults(new Map());
-  }, [canContinue, pendingResults, currentToolInvocations, addToolResult]);
+  }, [canContinue, pendingResults, currentToolInvocations, addToolResult, sendMessage]);
 
   const handlePrev = useCallback(() => {
     setDisplayedStepOverride((prev) => {

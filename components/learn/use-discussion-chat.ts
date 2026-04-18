@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { trpc } from "@/lib/trpc/react";
@@ -49,7 +49,10 @@ export function useDiscussionChat({
 
   // Cache the anchor for the in-flight submit so the server gets the
   // user-frozen value, not whatever the client state has drifted to.
-  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  // Must be a ref, not state: setState is async and the transport's
+  // prepareSendMessagesRequest runs synchronously inside sendMessage —
+  // reading from state would capture null on the first submit.
+  const pendingAnchorRef = useRef<string | null>(null);
 
   // Convert DB messages (Prisma rows) into UIMessage shape useChat understands.
   // The anchor is preserved as a custom field on the message so the message
@@ -92,7 +95,7 @@ export function useDiscussionChat({
           return {
             body: {
               learningId,
-              anchorMessageId: pendingAnchor ?? "",
+              anchorMessageId: pendingAnchorRef.current ?? "",
               chatConversationId: discussionQuery.data?.chatConversationId ?? undefined,
               clientMessageId: last?.id ?? `discussion-${Date.now()}`,
               input: inputParts,
@@ -100,26 +103,41 @@ export function useDiscussionChat({
           };
         },
       }),
-    [learningId, pendingAnchor, discussionQuery.data?.chatConversationId]
+    [learningId, discussionQuery.data?.chatConversationId]
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, status, setMessages } = useChat({
     id: instanceId,
     messages: initialMessages,
     transport,
   });
 
+  // useChat only reads `messages` prop on initial mount. The tRPC query
+  // resolves after mount, so we hydrate once the first successful response
+  // arrives. Guarded by a ref so we don't clobber live user submissions.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    if (!discussionQuery.isSuccess) return;
+    if (initialMessages.length === 0) {
+      hydratedRef.current = true;
+      return;
+    }
+    setMessages(initialMessages);
+    hydratedRef.current = true;
+  }, [discussionQuery.isSuccess, initialMessages, setMessages]);
+
   const sendDiscussion = useCallback(
     async (text: string, anchorMessageId: string) => {
       if (!text.trim() || !anchorMessageId) return;
-      setPendingAnchor(anchorMessageId);
+      pendingAnchorRef.current = anchorMessageId;
       try {
         await sendMessage({
           role: "user",
           parts: [{ type: "text", text }],
         });
       } finally {
-        setPendingAnchor(null);
+        pendingAnchorRef.current = null;
       }
     },
     [sendMessage]
