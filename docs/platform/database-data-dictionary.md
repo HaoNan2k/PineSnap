@@ -12,15 +12,16 @@
 ## Conversation
 
 
-| 字段                     | 类型          | 含义             |
-| ---------------------- | ----------- | -------------- |
-| `id`                   | `String`    | 会话主键（UUIDv7）   |
-| `title`                | `String`    | 会话标题           |
-| `userId`               | `String`    | 会话所属用户         |
-| `createdAt`            | `DateTime`  | 创建时间           |
-| `updatedAt`            | `DateTime`  | 最近活跃时间（用于列表排序） |
-| `firstClientMessageId` | `String?`   | 首条消息幂等键        |
-| `deletedAt`            | `DateTime?` | 软删除时间          |
+| 字段                     | 类型                 | 含义                                          |
+| ---------------------- | ------------------ | ------------------------------------------- |
+| `id`                   | `String`           | 会话主键（UUIDv7）                                |
+| `title`                | `String`           | 会话标题                                        |
+| `userId`               | `String`           | 会话所属用户                                      |
+| `kind`                 | `ConversationKind` | 会话类型：`canvas`（学习主线，tool-only）或 `chat`（讨论伴学，自由文本）。历史会话默认 `canvas` |
+| `createdAt`            | `DateTime`         | 创建时间                                        |
+| `updatedAt`            | `DateTime`         | 最近活跃时间（用于列表排序）                              |
+| `firstClientMessageId` | `String?`          | 首条消息幂等键                                     |
+| `deletedAt`            | `DateTime?`        | 软删除时间                                       |
 
 
 约束：`@@unique([userId, firstClientMessageId])`。
@@ -28,19 +29,20 @@
 ## Message
 
 
-| 字段                | 类型          | 含义                             |
-| ----------------- | ----------- | ------------------------------ |
-| `id`              | `String`    | 消息主键                           |
-| `conversationId`  | `String`    | 所属会话 ID                        |
-| `parentMessageId` | `String?`   | 预留分支/回溯父消息 ID                  |
-| `createdAt`       | `DateTime`  | 创建时间                           |
-| `role`            | `Role`      | 角色（user/assistant/system/tool） |
-| `clientMessageId` | `String?`   | 客户端幂等键                         |
-| `parts`           | `Json`      | 结构化消息内容（`ChatPart[]`）          |
-| `deletedAt`       | `DateTime?` | 软删除时间                          |
+| 字段                        | 类型          | 含义                                                             |
+| ------------------------- | ----------- | -------------------------------------------------------------- |
+| `id`                      | `String`    | 消息主键                                                           |
+| `conversationId`          | `String`    | 所属会话 ID                                                        |
+| `parentMessageId`         | `String?`   | 预留分支/回溯父消息 ID                                                  |
+| `createdAt`               | `DateTime`  | 创建时间                                                           |
+| `role`                    | `Role`      | 角色（user/assistant/system/tool）                                 |
+| `clientMessageId`         | `String?`   | 客户端幂等键                                                         |
+| `parts`                   | `Json`      | 结构化消息内容（`ChatPart[]`）                                          |
+| `deletedAt`               | `DateTime?` | 软删除时间                                                          |
+| `anchoredCanvasMessageId` | `String?`   | **Light Anchor**：仅 `kind=chat` conversation 的消息使用，记录用户提问时所在的 canvas assistant message id；canvas conversation 的消息为 NULL。UI 默认不按 anchor 过滤——它是元数据，留给未来可能的 filter/分析功能 |
 
 
-约束：`@@unique([conversationId, clientMessageId])`。
+约束：`@@unique([conversationId, clientMessageId])`。自引用外键 `Message_anchoredCanvasMessageId_fkey`（`ON DELETE SET NULL`，被 anchored 的 canvas message 软删后，前端读到 NULL 的 anchor 应 fallback 到"无 anchor"显示）。
 
 ## Resource
 

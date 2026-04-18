@@ -1,16 +1,17 @@
 ## 1. 数据模型变更（Phase 1）
 
-- [ ] 1.1 在 `prisma/schema.prisma` 新增 `ConversationKind` 枚举（`canvas` | `chat`）
-- [ ] 1.2 给 `Conversation` model 新增 `kind ConversationKind @default(canvas)` 字段
-- [ ] 1.3 给 `Message` model 新增 `anchoredCanvasMessageId String?` 字段（自引用 FK + index）；anchor **仅作元数据**使用（Light Anchor 决策，详见 design.md §1）
-- [ ] 1.4 生成 migration（`prisma migrate dev --name canvas-chat-split`），dev 数据库验证 schema 正确
-- [ ] 1.5 更新 `docs/platform/database-data-dictionary.md`，登记 `kind` 与 `anchoredCanvasMessageId` 字段定义
-- [ ] 1.6 给 `lib/db/conversation.ts` 加 `getCanvasConversation(learningId)` / `getOrCreateChatConversation(learningId, userId)` 方法（**复用现有 conversation CRUD**，不在 discussion.ts 重复造）
-- [ ] 1.6.1 `getOrCreateChatConversation` 防并发：在事务内 `SELECT pg_advisory_xact_lock(hashtext(learningId || '|' || userId || '|chat'))`，再 SELECT 现有 → 没有则创建。事务结束 lock 自释放。**不依赖 schema 约束**（Postgres 无法穿过 FK 引用 `Conversation.kind` 建唯一索引）
-- [ ] 1.7 新建 `lib/db/discussion.ts`：仅放 discussion 特有逻辑——`getDiscussionMessages(chatConversationId)` / `createDiscussionMessage({ chatConversationId, anchorMessageId, role, content })` / 不重新实现 conversation CRUD
-- [ ] 1.8 在 `createDiscussionMessage` 中实现 anchor 完整性 validator：校验 anchor message 属于同 learning 的 canvas conversation 且 role=assistant；不通过则抛错
-- [ ] 1.9 在 `lib/chat/types.ts` 新加共享 zod schema `DiscussionRequestBody`（含 learningId / anchorMessageId / input）；前后端**都用同一个 schema 验**
-- [ ] 1.10 编写单元测试覆盖：kind 隔离、anchor validator 三类违反场景（错 conversation、跨 learning、错 role）、懒创建、按 conversation 拉取整段
+- [x] 1.1 在 `prisma/schema.prisma` 新增 `ConversationKind` 枚举（`canvas` | `chat`）
+- [x] 1.2 给 `Conversation` model 新增 `kind ConversationKind @default(canvas)` 字段
+- [x] 1.3 给 `Message` model 新增 `anchoredCanvasMessageId String?` 字段（自引用 FK + index）；anchor **仅作元数据**使用（Light Anchor 决策，详见 design.md §1）
+- [x] 1.4 生成 migration `20260418161049_add_conversation_kind_and_anchor`，**已应用至本地 + 生产 supabase**（生产因 dotenv 加载顺序 bug 提前应用，已修 prisma.config.ts）
+- [x] 1.5 更新 `docs/platform/database-data-dictionary.md`，登记 `kind` 与 `anchoredCanvasMessageId` 字段定义
+- [x] 1.6 给 `lib/db/conversation.ts` 加 `getCanvasConversation(learningId, userId)` / `getOrCreateChatConversation(learningId, userId)` 方法（复用现有 conversation CRUD）
+- [x] 1.6.1 `getOrCreateChatConversation` 防并发：事务内 `pg_advisory_xact_lock(hashtext(learningId || '|' || userId || '|chat'))` → SELECT 现有 → 没有则创建。verify 脚本验证两次连续调用返回同一 id
+- [x] 1.6.2 修复 `lib/db/learning.ts:ensureLearningConversation` 加 `kind: "canvas"` 过滤（schema 加 kind 字段后的回归保护）
+- [x] 1.7 新建 `lib/db/discussion.ts`：`getDiscussionMessages(chatConversationId)` / `createDiscussionMessage({ chatConversationId, anchorMessageId, role, parts, clientMessageId? })` / `assertValidAnchor`
+- [x] 1.8 `createDiscussionMessage` 内置 anchor validator：校验 anchor 属于同 learning 的 canvas conversation 且 role=assistant 且 deletedAt IS NULL；不通过抛 `AnchorValidationError(reason)`，6 类违反 reason 全覆盖
+- [x] 1.9 新建 `lib/chat/schemas.ts` 含共享 zod schema `discussionRequestBodySchema`（含 learningId / anchorMessageId / chatConversationId? / clientMessageId / input）；前后端共用
+- [~] 1.10 **测试框架未在项目中搭建**——单测延后到 vitest bootstrap。替代方案：`scripts/verify-discussion-validator.ts` 用 NODE_OPTIONS='--conditions=react-server' + tsx 跑实际 DB 验证 9 个场景（含 anchor 6 类违反 + 懒创建 idempotent + happy path + getDiscussionMessages）。运行命令见脚本头注释
 
 ## 2. Discussion endpoint 与 prompt（Phase 1）
 

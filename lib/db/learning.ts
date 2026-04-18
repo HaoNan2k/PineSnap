@@ -245,10 +245,12 @@ export async function ensureLearningConversation(
   userId: string
 ) {
   const start = Date.now();
+  // After kind was added to Conversation, this lookup must be canvas-scoped:
+  // a learning may also have a chat conversation, which is not what callers expect here.
   const existing = await prisma.learningConversation.findFirst({
     where: {
       learningId,
-      conversation: { userId, deletedAt: null },
+      conversation: { userId, kind: "canvas", deletedAt: null },
     },
     include: { conversation: true },
   });
