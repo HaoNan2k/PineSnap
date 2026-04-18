@@ -32,10 +32,10 @@
 
 ## 4. tRPC schema 与 getState 升级（Phase 2）
 
-- [ ] 4.1 修改 `server/routers/learning.ts` 的 `getState`：返回新增 `canvasConversationId`（必填）与 `chatConversationId`（可选，未懒创建时为 null）
-- [ ] 4.2 新增 procedure `learning.getDiscussion`：输入 `{ learningId }`，返回该 learning 的 chat conversation 全段 messages（不按 step 过滤）
-- [ ] 4.3 输入/输出 schema 更新对应的 zod 定义
-- [ ] 4.4 单元测试 / e2e 验证 getState 与 getDiscussion 行为
+- [x] 4.1 `getState` 新增 `canvasConversationId`（必填）+ `chatConversationId`（可选，未懒创建时 null）；保留 `conversationId` 为 `canvasConversationId` 的别名以便前端渐进迁移
+- [x] 4.2 `learning.getDiscussion`：输入 `{ learningId }`，返回 `{ chatConversationId, messages }`；未懒创建时返回 `{ chatConversationId: null, messages: [] }`
+- [x] 4.3 同步更新 `getLearningStateLight` 的 select 加 `kind` 字段；zod 输入 schema 不变
+- [~] 4.4 单元测试同 1.10 / 2.6：测试框架未搭，行为验证留 task 9.x 手动跑
 
 ## 5. 前端：删除 chat drawer，新增 discussion sidebar（Phase 3）
 

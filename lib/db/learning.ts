@@ -119,7 +119,7 @@ export async function getLearningStateLight(id: string, userId: string) {
       conversations: {
         select: {
           conversation: {
-            select: { id: true, userId: true, deletedAt: true },
+            select: { id: true, userId: true, kind: true, deletedAt: true },
           },
         },
       },

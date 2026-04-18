@@ -194,17 +194,32 @@ export const learningRouter = router({
       const clarifyParsed = clarifyPayloadSchema.safeParse(learning.clarify);
       const clarify = clarifyParsed.success ? clarifyParsed.data : null;
 
-      // Extract conversationId from already-fetched data, skip extra DB call
-      const existingConv = learning.conversations.find(
-        (lc) => lc.conversation.userId === ctx.user.id && !lc.conversation.deletedAt
+      // Extract canvasConversationId from already-fetched data, skip extra DB call.
+      // Filter by kind=canvas: a learning may also have a chat conversation now.
+      const existingCanvasConv = learning.conversations.find(
+        (lc) =>
+          lc.conversation.userId === ctx.user.id &&
+          !lc.conversation.deletedAt &&
+          lc.conversation.kind === "canvas"
       );
-      const conversation = existingConv
-        ? { id: existingConv.conversation.id }
+      const canvasConversation = existingCanvasConv
+        ? { id: existingCanvasConv.conversation.id }
         : await ensureLearningConversation(learning.id, ctx.user.id);
+
+      // Discovery-only: chat conversation may not yet exist (lazy-created on
+      // the user's first sidebar question). Return null if absent — client
+      // will pass undefined through and the discussion endpoint will create.
+      const existingChatConv = learning.conversations.find(
+        (lc) =>
+          lc.conversation.userId === ctx.user.id &&
+          !lc.conversation.deletedAt &&
+          lc.conversation.kind === "chat"
+      );
+      const chatConversationId = existingChatConv?.conversation.id ?? null;
       const t2 = Date.now();
 
       const conversationWithMessages = await getConversation(
-        conversation.id,
+        canvasConversation.id,
         ctx.user.id
       );
       const t3 = Date.now();
@@ -220,6 +235,7 @@ export const learningRouter = router({
         getConvMs: t3 - t2,
         convertMsgsMs: t4 - t3,
         msgCount: conversationWithMessages?.messages.length ?? 0,
+        hasChatConv: chatConversationId !== null,
         totalMs: t4 - t0,
       });
 
@@ -230,7 +246,11 @@ export const learningRouter = router({
           clarify,
         },
         resources,
-        conversationId: conversation.id,
+        // Deprecated alias kept for the transition; new code should prefer
+        // canvasConversationId. Will be removed after frontend migration.
+        conversationId: canvasConversation.id,
+        canvasConversationId: canvasConversation.id,
+        chatConversationId,
         initialMessages,
       };
     }),
@@ -398,5 +418,40 @@ export const learningRouter = router({
       });
 
       return { plan: text };
+    }),
+
+  /**
+   * Fetch the full discussion (chat) conversation for a learning.
+   * Returns an empty array if the chat conversation has not been
+   * lazy-created yet (user has never asked a question via the sidebar).
+   *
+   * Light Anchor mode: returns the full timeline, no anchor filtering.
+   */
+  getDiscussion: protectedProcedure
+    .input(z.object({ learningId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await getLearningStateLight(input.learningId, ctx.user.id);
+      if (!result.ok) {
+        throw new TRPCError({
+          code: result.status === 403 ? "FORBIDDEN" : "NOT_FOUND",
+        });
+      }
+      const learning = result.learning;
+      const chatConv = learning.conversations.find(
+        (lc) =>
+          lc.conversation.userId === ctx.user.id &&
+          !lc.conversation.deletedAt &&
+          lc.conversation.kind === "chat"
+      );
+      if (!chatConv) {
+        return { chatConversationId: null, messages: [] as const };
+      }
+
+      const { getDiscussionMessages } = await import("@/lib/db/discussion");
+      const messages = await getDiscussionMessages(chatConv.conversation.id);
+      return {
+        chatConversationId: chatConv.conversation.id,
+        messages,
+      };
     }),
 });
