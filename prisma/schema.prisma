@@ -11,6 +11,7 @@ model Conversation {
   id                   String    @id @default(uuid(7))
   title                String    @default("New Chat")
   userId               String
+  kind                 ConversationKind @default(canvas)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
   firstClientMessageId String?
@@ -23,18 +24,22 @@ model Conversation {
 }
 
 model Message {
-  id              String       @id @default(uuid(7))
-  conversationId  String
-  parentMessageId String?
-  createdAt       DateTime     @default(now())
-  role            Role         @default(user)
-  clientMessageId String?
-  parts           Json         @default("[]")
-  deletedAt       DateTime?
-  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  id                      String       @id @default(uuid(7))
+  conversationId          String
+  parentMessageId         String?
+  createdAt               DateTime     @default(now())
+  role                    Role         @default(user)
+  clientMessageId         String?
+  parts                   Json         @default("[]")
+  deletedAt               DateTime?
+  anchoredCanvasMessageId String?
+  conversation            Conversation @relation(fields: [conversationId], references: [id])
+  anchoredCanvasMessage   Message?     @relation("AnchoredTo", fields: [anchoredCanvasMessageId], references: [id])
+  anchoredChats           Message[]    @relation("AnchoredTo")
 
   @@unique([conversationId, clientMessageId])
   @@index([conversationId])
+  @@index([anchoredCanvasMessageId])
 }
 
 model CaptureToken {
@@ -180,6 +185,11 @@ enum Role {
   assistant
   system
   tool
+}
+
+enum ConversationKind {
+  canvas
+  chat
 }
 
 enum CaptureSourceType {

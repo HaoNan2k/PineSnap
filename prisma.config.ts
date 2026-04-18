@@ -1,5 +1,11 @@
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
 import { defineConfig, env } from "prisma/config";
+
+// Mirror Next.js env-loading order: .env first, then .env.local overrides.
+// Prevents Prisma migrations from accidentally hitting production when a
+// developer has a local Supabase configured via .env.local.
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local", override: true });
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
