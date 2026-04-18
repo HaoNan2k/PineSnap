@@ -17,7 +17,7 @@ import {
   sdkToChatParts,
 } from "@/lib/chat/converter";
 import {
-  createDiscussionMessage,
+  assertValidAnchor,
   getDiscussionMessages,
   AnchorValidationError,
 } from "@/lib/db/discussion";
@@ -163,14 +163,11 @@ export async function POST(req: Request) {
       currentStepNumber,
     });
 
-    // Pre-validate the anchor BEFORE any side effects (cheap fail).
-    // We catch AnchorValidationError specifically and translate to 400.
+    // Pre-validate the anchor BEFORE LLM allocation (cheap fail). Same
+    // validator that createDiscussionMessage runs internally — we call it
+    // directly here because persistence below uses tx.message.create
+    // (we need user+assistant atomicity, not exposed by createDiscussionMessage).
     try {
-      // We do this via a no-op assert by attempting createDiscussionMessage's
-      // validator path. Since createDiscussionMessage internally validates,
-      // we duplicate the check here just for early failure with a clean error.
-      // (The validator is fast: 2 SELECT queries.)
-      const { assertValidAnchor } = await import("@/lib/db/discussion");
       await assertValidAnchor(chatConversation.id, anchorMessageId);
     } catch (err) {
       if (err instanceof AnchorValidationError) {
@@ -198,11 +195,15 @@ export async function POST(req: Request) {
       ...userInputModelMessages,
     ];
 
+    // Capture the streamText result so we can read response.messages in the
+    // outer onFinish AFTER the SDK has decided whether the stream aborted.
+    let streamTextResult: ReturnType<typeof streamText> | null = null;
+
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         writer.write({ type: "start" });
 
-        const result = streamText({
+        streamTextResult = streamText({
           model: "openai/gpt-5.2",
           messages: requestMessages,
           // Discussion endpoint MUST NOT expose any tools (Light Anchor design).
@@ -210,54 +211,80 @@ export async function POST(req: Request) {
           onError: (error) => {
             logError("streamText /api/learn/discussion failed", error);
           },
-          onFinish: ({ response, ...rest }) => {
-            const isAborted =
-              "isAborted" in rest && (rest as { isAborted?: boolean }).isAborted === true;
-            if (isAborted) {
-              // Light Anchor + no-write-on-abort: do not persist anything when the
-              // stream is aborted mid-flight. The user can re-submit.
-              return;
-            }
-            waitUntil(
-              (async () => {
-                try {
-                  await prisma.$transaction(async (tx) => {
-                    // Persist the user input first
-                    await tx.message.create({
-                      data: {
-                        conversationId: chatConversation.id,
-                        role: Role.user,
-                        parts: input as unknown as object,
-                        clientMessageId,
-                        anchoredCanvasMessageId: anchorMessageId,
-                      },
-                    });
-                    // Then persist all assistant messages from this turn
-                    for (const message of response.messages) {
-                      const parts = sdkToChatParts(
-                        message.content as Array<ContentPart<ToolSet>>
-                      );
-                      if (parts.length === 0) continue;
-                      await tx.message.create({
-                        data: {
-                          conversationId: chatConversation.id,
-                          role: Role.assistant,
-                          parts: parts as unknown as object,
-                          anchoredCanvasMessageId: anchorMessageId,
-                        },
-                      });
-                    }
-                  });
-                  await touchConversation(chatConversation.id, userId);
-                } catch (error) {
-                  logError("Failed to persist discussion messages", error);
-                }
-              })()
-            );
-          },
+          // Note: streamText.onFinish is intentionally not used for persistence —
+          // its callback signature does not include `isAborted`. Persistence and
+          // abort handling live in createUIMessageStream.onFinish below, which
+          // does receive isAborted (UIMessageStreamOnFinishCallback).
         });
 
-        writer.merge(result.toUIMessageStream({ sendStart: false }));
+        writer.merge(streamTextResult.toUIMessageStream({ sendStart: false }));
+      },
+      onFinish: ({ isAborted }) => {
+        // Light Anchor + no-write-on-abort: when the user disconnects mid-
+        // stream, persist nothing. They can resubmit.
+        if (isAborted) {
+          return;
+        }
+        if (!streamTextResult) {
+          // execute never ran; nothing to persist.
+          return;
+        }
+        const resultRef = streamTextResult;
+        waitUntil(
+          (async () => {
+            try {
+              const finalResponse = await resultRef.response;
+              await prisma.$transaction(async (tx) => {
+                try {
+                  await tx.message.create({
+                    data: {
+                      conversationId: chatConversation.id,
+                      role: Role.user,
+                      parts: input as unknown as object,
+                      clientMessageId,
+                      anchoredCanvasMessageId: anchorMessageId,
+                    },
+                  });
+                } catch (err) {
+                  // Idempotent re-submit: another concurrent request with the
+                  // same clientMessageId already wrote the user message.
+                  // Treat as no-op for the user row but keep persisting the
+                  // assistant rows from THIS turn.
+                  if (
+                    typeof err === "object" &&
+                    err !== null &&
+                    "code" in err &&
+                    (err as { code?: string }).code === "P2002"
+                  ) {
+                    logError(
+                      "Duplicate clientMessageId in discussion (concurrent submit)",
+                      { clientMessageId, chatConversationId: chatConversation.id }
+                    );
+                  } else {
+                    throw err;
+                  }
+                }
+                for (const message of finalResponse.messages) {
+                  const parts = sdkToChatParts(
+                    message.content as Array<ContentPart<ToolSet>>
+                  );
+                  if (parts.length === 0) continue;
+                  await tx.message.create({
+                    data: {
+                      conversationId: chatConversation.id,
+                      role: Role.assistant,
+                      parts: parts as unknown as object,
+                      anchoredCanvasMessageId: anchorMessageId,
+                    },
+                  });
+                }
+              });
+              await touchConversation(chatConversation.id, userId);
+            } catch (error) {
+              logError("Failed to persist discussion messages", error);
+            }
+          })()
+        );
       },
       onError: (error) => {
         logError("UI message stream /api/learn/discussion failed", error);
@@ -268,6 +295,10 @@ export async function POST(req: Request) {
     return createUIMessageStreamResponse({
       stream,
       headers: UI_MESSAGE_STREAM_HEADERS,
+      // consumeSseStream forces our onFinish callback to fire even when the
+      // client disconnects mid-stream (the SSE response is still teed to the
+      // client; this drains the server-side copy so cleanup runs). See
+      // https://ai-sdk.dev/docs/troubleshooting/stream-abort-handling
       consumeSseStream: consumeStream,
     });
   } catch (err) {
@@ -277,14 +308,16 @@ export async function POST(req: Request) {
 }
 
 /**
- * Why we re-export createDiscussionMessage's validator inline above:
- * we want a clean 400 with `reason` BEFORE allocating the LLM. This costs
- * one extra round-trip but the validator query is light (2 SELECTs by id).
+ * Why this route does NOT call lib/db/discussion's createDiscussionMessage:
  *
- * The waitUntil callback also goes through createDiscussionMessage when
- * persisting? No — we use raw prisma.message.create inside a transaction
- * because we want user + assistant atomicity, and createDiscussionMessage
- * doesn't expose a tx parameter. The validator was already checked above,
- * so anchor integrity holds.
+ * We need user + assistant messages persisted in a single transaction
+ * (otherwise abort/error in the middle could leave a half-written turn).
+ * createDiscussionMessage takes a top-level prisma client, not a tx, so
+ * we use tx.message.create directly inside prisma.$transaction.
+ *
+ * Anchor integrity is preserved by calling assertValidAnchor BEFORE the
+ * LLM allocation (and that anchor stays frozen via the request body for
+ * the persistence step). createDiscussionMessage is unused in this file
+ * but remains the canonical helper for any non-route caller (scripts,
+ * future workers, etc.).
  */
-void createDiscussionMessage;
