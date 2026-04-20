@@ -326,14 +326,20 @@ function CanvasSession({
   }
 
   // Continue is clickable when:
-  // - no pending A2UI tools (empty canvas → kickoff first step; or pure-text step → advance)
-  // - all pending A2UI tools have a user-supplied result
+  // - no assistant message yet (empty canvas) → Continue kicks off the first step
+  // - assistant turn has pending tools AND every one of them has a user-supplied result
+  // Explicitly NOT clickable when every tool already has an output — that is the
+  // window between `addToolResult` and `sendAutomaticallyWhen` firing; letting
+  // the user drop a "Continue" text turn there corrupts the transcript
+  // (OpenAI: "No tool output found for function call ...").
   const canContinue = useMemo(() => {
     if (isBusy || isGated || shouldShowError) return false;
+    if (!lastMessage || lastMessage.role !== "assistant") return true;
+    if (currentToolInvocations.length === 0) return false;
     const pendingTools = currentToolInvocations.filter((t) => !t.isReadOnly);
-    if (pendingTools.length === 0) return true;
+    if (pendingTools.length === 0) return false;
     return pendingTools.every((t) => pendingResults.has(t.toolCallId));
-  }, [isBusy, isGated, shouldShowError, currentToolInvocations, pendingResults]);
+  }, [isBusy, isGated, shouldShowError, lastMessage, currentToolInvocations, pendingResults]);
 
   // Handle pending value changes from A2UI components
   const handlePendingChange = useCallback(
@@ -394,13 +400,13 @@ function CanvasSession({
   const handleContinue = useCallback(() => {
     if (!canContinue) return;
 
-    const pendingTools = currentToolInvocations.filter((t) => !t.isReadOnly);
-    if (pendingTools.length === 0) {
-      // Empty canvas or pure-text step — a user "Continue" turn drives the stream.
+    // Empty canvas — no assistant yet. A user "Continue" turn kicks off step 1.
+    if (!lastMessage || lastMessage.role !== "assistant") {
       sendMessage({ role: "user", parts: [{ type: "text", text: "Continue" }] });
       return;
     }
 
+    // Otherwise submit pending tool results for the current assistant turn.
     for (const [toolCallId, output] of pendingResults) {
       const tool = currentToolInvocations.find((t) => t.toolCallId === toolCallId);
       if (tool) {
@@ -413,7 +419,7 @@ function CanvasSession({
     }
 
     setPendingResults(new Map());
-  }, [canContinue, pendingResults, currentToolInvocations, addToolResult, sendMessage]);
+  }, [canContinue, lastMessage, pendingResults, currentToolInvocations, addToolResult, sendMessage]);
 
   const handlePrev = useCallback(() => {
     setDisplayedStepOverride((prev) => {
