@@ -45,6 +45,9 @@ docs/
 ### decisions/ 设计决策
 命名：`NNNN-主题.md`（编号递增）。ADR 风格：背景 / 选项对比 / 决策 / 理由。
 - `0001-local-supabase-dev-env.md` — 本地开发使用 supabase start 而非远程 DB
+- `0002-canvas-conversation-recovery-strategy.md` — Canvas 学习会话的中断恢复策略
+- `0003-canvas-chat-architecture.md` — Canvas + Chat 架构重设计（Light Anchor）
+- `0004-live-session-message-id.md` — Live-session 时 canvas 消息 id 的一致性契约（server 预生成 UUIDv7 → stream start 回写 → DB 同 id）
 
 ### performance/ 性能优化
 命名：`YYYY-MM-DD-领域-主题.md`。记录"问题 / 指标前后 / 方案 / 验证"。
@@ -54,6 +57,8 @@ docs/
 ### incidents/ 排障报告
 命名：`YYYY-MM-DD-领域-主题.md`。记录"现象 / 根因 / 修复 / 预防"。
 - `2026-04-14-bilibili-subtitle-mismatch.md` — B 站字幕错轨问题
+- `2026-04-19-019bdc0c-orphan-cleanup.md` — 019bdc0c learning canvas 卡死会话脏数据清理
+- `2026-04-19-canvas-chat-regression-cascade.md` — 0003 架构落地后 5 个层叠 regression（含 QA 方法论教训）
 
 ### verification/ 验证日志
 - `e2e-log.md` — 端到端测试记录
