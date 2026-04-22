@@ -17,7 +17,8 @@ export function MainLayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <MainSidebar />
-      <main className="flex-1 flex flex-col min-w-0">{children}</main>
+      <main className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">{children}</main>
+      <MobileBottomNav />
     </div>
   );
 }
@@ -26,7 +27,7 @@ function MainSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-72 border-r border-gray-200 dark:border-gray-800 h-screen sticky top-0 flex flex-col justify-between bg-background-light dark:bg-background-dark p-8">
+    <aside className="hidden md:flex w-72 border-r border-gray-200 dark:border-gray-800 h-screen sticky top-0 flex-col justify-between bg-background-light dark:bg-background-dark p-8">
       <div className="flex flex-col gap-10">
         {/* Brand */}
         <Link href="/sources" className="flex items-center gap-3">
@@ -83,5 +84,35 @@ function MainSidebar() {
         <UserMenu variant="sidebar" loginHref="/sources" />
       </div>
     </aside>
+  );
+}
+
+function MobileBottomNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-800">
+      <div className="flex items-center justify-around h-14">
+        {navItems.map((item) => {
+          const isActive = pathname.startsWith(item.href);
+          const Icon = item.Icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-lg transition-colors",
+                isActive
+                  ? "text-primary"
+                  : "text-forest-muted"
+              )}
+            >
+              <Icon className="size-5" aria-hidden />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

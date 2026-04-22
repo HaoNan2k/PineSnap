@@ -91,10 +91,71 @@ export async function getLearningWithResources(id: string) {
   });
 }
 
+/**
+ * Lightweight query for getState: only fetches fields needed by the learn page UI.
+ * Skips captureJobs/artifacts/metadata entirely — the page only uses resource.title.
+ */
+export async function getLearningStateLight(id: string, userId: string) {
+  const start = Date.now();
+  const learning = await prisma.learning.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      plan: true,
+      clarify: true,
+      deletedAt: true,
+      resources: {
+        select: {
+          resource: {
+            select: {
+              id: true,
+              userId: true,
+              title: true,
+              sourceType: true,
+            },
+          },
+        },
+      },
+      conversations: {
+        select: {
+          conversation: {
+            select: { id: true, userId: true, kind: true, deletedAt: true },
+          },
+        },
+      },
+    },
+  });
+
+  const fetchMs = Date.now() - start;
+
+  if (!learning || learning.deletedAt) {
+    return { ok: false as const, status: 404 as const };
+  }
+
+  const totalResources = learning.resources.length;
+  if (totalResources === 0) {
+    return { ok: false as const, status: 404 as const };
+  }
+
+  const ownedCount = learning.resources.filter(
+    (lr) => lr.resource.userId === userId
+  ).length;
+
+  if (ownedCount !== totalResources) {
+    return { ok: false as const, status: 403 as const };
+  }
+
+  console.info("[perf] learning.getStateLight", { learningId: id, fetchMs });
+
+  return { ok: true as const, learning };
+}
+
 export async function getLearningWithAccessCheck(
   id: string,
-  userId: string
+  userId: string,
+  options?: { includeContent?: boolean }
 ): Promise<LearningAccessResult> {
+  const includeContent = options?.includeContent ?? true;
   const start = Date.now();
   
   // Single query to get learning and its resources (for access check)
@@ -126,7 +187,7 @@ export async function getLearningWithAccessCheck(
                       id: true,
                       kind: true,
                       language: true,
-                      content: true,
+                      ...(includeContent && { content: true }),
                       createdAt: true,
                     },
                   },
@@ -184,10 +245,12 @@ export async function ensureLearningConversation(
   userId: string
 ) {
   const start = Date.now();
+  // After kind was added to Conversation, this lookup must be canvas-scoped:
+  // a learning may also have a chat conversation, which is not what callers expect here.
   const existing = await prisma.learningConversation.findFirst({
     where: {
       learningId,
-      conversation: { userId, deletedAt: null },
+      conversation: { userId, kind: "canvas", deletedAt: null },
     },
     include: { conversation: true },
   });

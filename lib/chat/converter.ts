@@ -75,6 +75,22 @@ function truncateText(text: string, maxChars: number): { text: string; truncated
 }
 
 async function chatPartsToUserContent(parts: ChatPart[]): Promise<UserContent> {
+  // Collect file parts that need byte resolution, resolve all in parallel.
+  const fileParts = parts.filter(
+    (p): p is Extract<ChatPart, { type: "file" }> =>
+      p.type === "file" && (p.mediaType.startsWith("image/") || isTextLikeMediaType(p.mediaType))
+  );
+  const fileResults = await Promise.all(
+    fileParts.map(async (p) => {
+      try {
+        return { ref: p.ref, bytes: await fileContentResolver.readBytes(p.ref), error: false as const };
+      } catch {
+        return { ref: p.ref, bytes: null, error: true as const };
+      }
+    })
+  );
+  const fileByteMap = new Map(fileResults.map((r) => [r.ref, r]));
+
   const content: UserContent = [];
   for (const p of parts) {
     if (p.type === "text") {
@@ -82,11 +98,10 @@ async function chatPartsToUserContent(parts: ChatPart[]): Promise<UserContent> {
     } else if (p.type === "file") {
       // Bytes-first for images: avoid passing local/private URLs to model providers.
       if (p.mediaType.startsWith("image/")) {
-        try {
-          const bytes = await fileContentResolver.readBytes(p.ref);
-          content.push({ type: "image", image: bytes, mediaType: p.mediaType });
-        } catch {
-          // Missing/invalid ref should not break the whole chat request.
+        const result = fileByteMap.get(p.ref);
+        if (result && !result.error && result.bytes) {
+          content.push({ type: "image", image: result.bytes, mediaType: p.mediaType });
+        } else {
           content.push({
             type: "text",
             text: `附件《${p.name}》不可用（文件缺失或无权限）。`,
@@ -97,9 +112,9 @@ async function chatPartsToUserContent(parts: ChatPart[]): Promise<UserContent> {
 
       // Text-like files: extract and inject as bounded text (with truncation).
       if (isTextLikeMediaType(p.mediaType)) {
-        try {
-          const bytes = await fileContentResolver.readBytes(p.ref);
-          const decoded = Buffer.from(bytes).toString("utf-8");
+        const result = fileByteMap.get(p.ref);
+        if (result && !result.error && result.bytes) {
+          const decoded = Buffer.from(result.bytes).toString("utf-8");
           const { text, truncated } = truncateText(decoded, 20_000);
           const header = `附件《${p.name}》(${p.mediaType})：`;
           const footer = truncated ? "\n\n[内容已截断]" : "";
@@ -107,7 +122,7 @@ async function chatPartsToUserContent(parts: ChatPart[]): Promise<UserContent> {
             type: "text",
             text: `${header}\n\`\`\`\n${text}\n\`\`\`${footer}`,
           });
-        } catch {
+        } else {
           content.push({
             type: "text",
             text: `附件《${p.name}》不可用（文件缺失或无权限）。`,
@@ -241,10 +256,29 @@ export async function convertDbToUIMessages(
     createdAt: Date;
   }>
 ): Promise<UIMessage[]> {
+  // Pre-resolve all file URLs in parallel to avoid sequential awaits.
+  const allParsed = dbMessages.map((m) => ({ ...m, chatParts: parseMessageParts(m.parts) }));
+  const fileRefs = new Set<string>();
+  for (const { chatParts } of allParsed) {
+    for (const p of chatParts) {
+      if (p.type === "file") fileRefs.add(p.ref);
+    }
+  }
+  const urlResults = await Promise.all(
+    [...fileRefs].map(async (ref) => {
+      try {
+        return { ref, url: await fileStorage.resolveUrl(ref) };
+      } catch {
+        return { ref, url: "" };
+      }
+    })
+  );
+  const urlMap = new Map(urlResults.map((r) => [r.ref, r.url]));
+
   const uiMessages: UIMessage[] = [];
 
-  for (const m of dbMessages) {
-    const chatParts = parseMessageParts(m.parts);
+  for (const m of allParsed) {
+    const chatParts = m.chatParts;
     const uiParts: UIMessage["parts"] = [];
 
     // Tool messages are persisted separately in DB (Role.tool), but in UI we want
@@ -366,14 +400,7 @@ export async function convertDbToUIMessages(
           });
         }
       } else if (p.type === "file") {
-        let url = "";
-        try {
-          url = await fileStorage.resolveUrl(p.ref);
-        } catch {
-          // Missing/legacy refs must not break page rendering.
-          // UI currently renders only filenames, so empty url is acceptable.
-          url = "";
-        }
+        const url = urlMap.get(p.ref) ?? "";
         uiParts.push({
           type: "file",
           mediaType: p.mediaType,

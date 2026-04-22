@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import {
   createLearningForResources,
   getLearningWithAccessCheck,
+  getLearningStateLight,
   ensureLearningConversation,
   updateLearningClarify,
   updateLearningPlanWithClarify,
@@ -72,8 +73,8 @@ function getLearningContentFromResource(resource: {
  * Helper to get learning with access check, throws TRPCError on failure.
  * Avoids repeated code and non-null assertions.
  */
-async function getLearningOrThrow(learningId: string, userId: string) {
-  const result = await getLearningWithAccessCheck(learningId, userId);
+async function getLearningOrThrow(learningId: string, userId: string, options?: { includeContent?: boolean }) {
+  const result = await getLearningWithAccessCheck(learningId, userId, options);
   if (!result.ok) {
     throw new TRPCError({
       code: result.status === 403 ? "FORBIDDEN" : "NOT_FOUND",
@@ -120,6 +121,44 @@ function resolveAnswerText(
 }
 
 export const learningRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const { prisma } = await import("@/lib/prisma");
+    const learnings = await prisma.learning.findMany({
+      where: {
+        deletedAt: null,
+        resources: {
+          some: {
+            resource: { userId: ctx.user.id },
+          },
+        },
+      },
+      include: {
+        resources: {
+          include: {
+            resource: {
+              select: { id: true, title: true, sourceType: true, thumbnailUrl: true },
+            },
+          },
+        },
+        conceptsCovered: {
+          select: { concept: true, coveredAt: true },
+          orderBy: { coveredAt: "desc" },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+    });
+
+    return learnings.map((l) => ({
+      id: l.id,
+      hasPlan: !!l.plan,
+      createdAt: l.createdAt.toISOString(),
+      updatedAt: l.updatedAt.toISOString(),
+      resources: l.resources.map((r) => r.resource),
+      conceptsCovered: l.conceptsCovered.length,
+    }));
+  }),
+
   create: protectedProcedure
     .input(
       z.object({
@@ -142,22 +181,63 @@ export const learningRouter = router({
   getState: protectedProcedure
     .input(z.object({ learningId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const learning = await getLearningOrThrow(input.learningId, ctx.user.id);
+      const t0 = Date.now();
+      const result = await getLearningStateLight(input.learningId, ctx.user.id);
+      if (!result.ok) {
+        throw new TRPCError({
+          code: result.status === 403 ? "FORBIDDEN" : "NOT_FOUND",
+        });
+      }
+      const learning = result.learning;
+      const t1 = Date.now();
       const resources = learning.resources.map((item) => item.resource);
       const clarifyParsed = clarifyPayloadSchema.safeParse(learning.clarify);
       const clarify = clarifyParsed.success ? clarifyParsed.data : null;
 
-      const conversation = await ensureLearningConversation(
-        learning.id,
-        ctx.user.id
+      // Extract canvasConversationId from already-fetched data, skip extra DB call.
+      // Filter by kind=canvas: a learning may also have a chat conversation now.
+      const existingCanvasConv = learning.conversations.find(
+        (lc) =>
+          lc.conversation.userId === ctx.user.id &&
+          !lc.conversation.deletedAt &&
+          lc.conversation.kind === "canvas"
       );
+      const canvasConversation = existingCanvasConv
+        ? { id: existingCanvasConv.conversation.id }
+        : await ensureLearningConversation(learning.id, ctx.user.id);
+
+      // Discovery-only: chat conversation may not yet exist (lazy-created on
+      // the user's first sidebar question). Return null if absent — client
+      // will pass undefined through and the discussion endpoint will create.
+      const existingChatConv = learning.conversations.find(
+        (lc) =>
+          lc.conversation.userId === ctx.user.id &&
+          !lc.conversation.deletedAt &&
+          lc.conversation.kind === "chat"
+      );
+      const chatConversationId = existingChatConv?.conversation.id ?? null;
+      const t2 = Date.now();
+
       const conversationWithMessages = await getConversation(
-        conversation.id,
+        canvasConversation.id,
         ctx.user.id
       );
+      const t3 = Date.now();
       const initialMessages = conversationWithMessages
         ? await convertLearnDbToUIMessages(conversationWithMessages.messages)
         : [];
+      const t4 = Date.now();
+
+      console.info("[perf] learning.getState", {
+        learningId: input.learningId,
+        getLearningMs: t1 - t0,
+        ensureConvMs: t2 - t1,
+        getConvMs: t3 - t2,
+        convertMsgsMs: t4 - t3,
+        msgCount: conversationWithMessages?.messages.length ?? 0,
+        hasChatConv: chatConversationId !== null,
+        totalMs: t4 - t0,
+      });
 
       return {
         learning: {
@@ -166,7 +246,11 @@ export const learningRouter = router({
           clarify,
         },
         resources,
-        conversationId: conversation.id,
+        // Deprecated alias kept for the transition; new code should prefer
+        // canvasConversationId. Will be removed after frontend migration.
+        conversationId: canvasConversation.id,
+        canvasConversationId: canvasConversation.id,
+        chatConversationId,
         initialMessages,
       };
     }),
@@ -334,5 +418,40 @@ export const learningRouter = router({
       });
 
       return { plan: text };
+    }),
+
+  /**
+   * Fetch the full discussion (chat) conversation for a learning.
+   * Returns an empty array if the chat conversation has not been
+   * lazy-created yet (user has never asked a question via the sidebar).
+   *
+   * Light Anchor mode: returns the full timeline, no anchor filtering.
+   */
+  getDiscussion: protectedProcedure
+    .input(z.object({ learningId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await getLearningStateLight(input.learningId, ctx.user.id);
+      if (!result.ok) {
+        throw new TRPCError({
+          code: result.status === 403 ? "FORBIDDEN" : "NOT_FOUND",
+        });
+      }
+      const learning = result.learning;
+      const chatConv = learning.conversations.find(
+        (lc) =>
+          lc.conversation.userId === ctx.user.id &&
+          !lc.conversation.deletedAt &&
+          lc.conversation.kind === "chat"
+      );
+      if (!chatConv) {
+        return { chatConversationId: null, messages: [] as const };
+      }
+
+      const { getDiscussionMessages } = await import("@/lib/db/discussion");
+      const messages = await getDiscussionMessages(chatConv.conversation.id);
+      return {
+        chatConversationId: chatConv.conversation.id,
+        messages,
+      };
     }),
 });

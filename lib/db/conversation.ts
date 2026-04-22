@@ -1,14 +1,85 @@
 import { prisma } from "@/lib/prisma";
 import { logWarn } from "@/lib/logger";
-import type { Conversation } from "@/generated/prisma/client";
+import { type Conversation, ConversationKind } from "@/generated/prisma/client";
 
-export async function createConversation(userId: string, firstClientMessageId?: string) {
+export async function createConversation(
+  userId: string,
+  firstClientMessageId?: string,
+  kind: ConversationKind = ConversationKind.canvas
+) {
   return prisma.conversation.create({
     data: {
       userId,
+      kind,
       title: "新对话",
       firstClientMessageId: firstClientMessageId ?? null,
     },
+  });
+}
+
+/**
+ * Get the canvas conversation for a learning + user pair.
+ * Returns null if not found.
+ */
+export async function getCanvasConversation(learningId: string, userId: string) {
+  const link = await prisma.learningConversation.findFirst({
+    where: {
+      learningId,
+      conversation: {
+        userId,
+        kind: ConversationKind.canvas,
+        deletedAt: null,
+      },
+    },
+    include: { conversation: true },
+  });
+  return link?.conversation ?? null;
+}
+
+/**
+ * Get-or-create the chat conversation for a learning + user pair.
+ *
+ * Uses pg_advisory_xact_lock to prevent race conditions: two concurrent
+ * requests from the same user (e.g. multi-tab) cannot both create
+ * separate chat conversations.
+ *
+ * Returns the existing chat conversation if one already exists, otherwise
+ * creates a new one inside the same transaction.
+ */
+export async function getOrCreateChatConversation(
+  learningId: string,
+  userId: string
+): Promise<Conversation> {
+  return prisma.$transaction(async (tx) => {
+    // Acquire advisory lock keyed on (learningId, userId, 'chat').
+    // hashtext() returns int4; pg_advisory_xact_lock(int4) is the right overload.
+    // Lock is released automatically on transaction end.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${learningId}|${userId}|chat`}))`;
+
+    const existing = await tx.learningConversation.findFirst({
+      where: {
+        learningId,
+        conversation: {
+          userId,
+          kind: ConversationKind.chat,
+          deletedAt: null,
+        },
+      },
+      include: { conversation: true },
+    });
+    if (existing?.conversation) return existing.conversation;
+
+    const created = await tx.conversation.create({
+      data: {
+        userId,
+        kind: ConversationKind.chat,
+        title: "学习讨论",
+      },
+    });
+    await tx.learningConversation.create({
+      data: { learningId, conversationId: created.id },
+    });
+    return created;
   });
 }
 

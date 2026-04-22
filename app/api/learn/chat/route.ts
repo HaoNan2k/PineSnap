@@ -9,6 +9,7 @@ import {
   type ToolSet,
 } from "ai";
 import { z } from "zod";
+import { v7 as uuidv7 } from "uuid";
 import { waitUntil } from "@vercel/functions";
 import { getAuthenticatedUserIdFromRequest } from "@/lib/supabase/auth";
 import { getLearningWithAccessCheck } from "@/lib/db/learning";
@@ -23,15 +24,15 @@ import { Role } from "@/generated/prisma/client";
 import { getConversation, touchConversation } from "@/lib/db/conversation";
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/logger";
-import { a2uiTools } from "@/lib/chat/tools";
-import { getContextSystemPrompt } from "@/lib/chat/context-manager";
+import { a2uiTools, createServerTools } from "@/lib/chat/tools";
+import { getContextSystemPrompt, getClarifySystemPrompt } from "@/lib/chat/context-manager";
 import {
   recordLearnTraceError,
   recordLearnTraceFinish,
   recordLearnTraceStart,
 } from "@/lib/dev/trace-store";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function toTraceMessages(messages: ModelMessage[]) {
   return messages.map((m) => ({ role: m.role, content: m.content }));
@@ -130,12 +131,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!learning.plan) {
-      return Response.json({ error: "Learning plan required" }, { status: 400 });
-    }
+    const isClarifyMode = !learning.plan;
 
     // 2. Persist User/Tool Message
-    // If input contains tool-result, it must be Role.tool for the model to understand context.
     const hasToolResult = input.some((p) => p.type === "tool-result");
     const messageRole = hasToolResult ? Role.tool : Role.user;
 
@@ -157,10 +155,12 @@ export async function POST(req: Request) {
       }))
     );
 
-    const systemPrompt = await getContextSystemPrompt(userId, {
-      learningPlan: learning.plan,
-      resourcesContext: contextText,
-    });
+    const systemPrompt = isClarifyMode
+      ? await getClarifySystemPrompt(userId, { resourcesContext: contextText })
+      : await getContextSystemPrompt(userId, {
+          learningPlan: learning.plan!,
+          resourcesContext: contextText,
+        });
 
     const modelMessages = await dbToModelMessages(conversation.messages);
 
@@ -177,10 +177,25 @@ export async function POST(req: Request) {
       requestMessages: toTraceMessages(requestMessages),
     });
 
+    const serverTools = createServerTools(learningId);
+    const tools = isClarifyMode
+      ? { savePlan: serverTools.savePlan }
+      : { ...a2uiTools, ...serverTools };
+
+    // Pre-generate the assistant message id so the client's useChat state
+    // and the persisted DB row share the same id. Without this, the
+    // client-side message id is an AI SDK nanoid while the DB id is a new
+    // uuid v7 — discussion anchors (which validate by DB id) can never
+    // resolve to a live-streamed canvas message. See docs/decisions/0003
+    // (Light Anchor) for anchoring rationale.
+    const assistantMessageId = uuidv7();
+    let assistantPersisted = false;
+
     const result = streamText({
       model: "openai/gpt-5.2",
       messages: requestMessages,
-      tools: a2uiTools,
+      tools,
+      toolChoice: isClarifyMode ? "auto" : "required",
       stopWhen: stepCountIs(5),
       onError: (error) => {
         recordLearnTraceError(traceRoundId, errorToString(error));
@@ -201,7 +216,21 @@ export async function POST(req: Request) {
                 if (parts.length === 0) continue;
                 const role =
                   message.role === "tool" ? Role.tool : Role.assistant;
-                await createMessage(conversationId, role, parts);
+                // Apply the pre-generated id to the first assistant message
+                // we persist for this turn — that is the one the client
+                // sees as the latest canvas step and will anchor against.
+                const explicitId =
+                  role === Role.assistant && !assistantPersisted
+                    ? assistantMessageId
+                    : undefined;
+                if (explicitId) assistantPersisted = true;
+                await createMessage(
+                  conversationId,
+                  role,
+                  parts,
+                  undefined,
+                  explicitId
+                );
               }
               await touchConversation(conversationId, userId);
             } catch (error) {
@@ -214,7 +243,7 @@ export async function POST(req: Request) {
 
     const stream = createUIMessageStream({
       execute: ({ writer }) => {
-        writer.write({ type: "start" });
+        writer.write({ type: "start", messageId: assistantMessageId });
         writer.merge(result.toUIMessageStream({ sendStart: false }));
       },
       onError: (error) => {

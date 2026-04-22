@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useCallback } from "react";
 import { ArrowDown } from "lucide-react";
 
 import type { Message } from "@/components/chat/types";
@@ -13,7 +14,7 @@ import { A2UIRenderer, type A2UIAddToolResult } from "@/components/chat/a2ui/ren
 
 const messageTextClassName = "text-[15px] leading-relaxed";
 
-function MessageItem({
+const MessageItem = memo(function MessageItem({
   message,
   addToolResult,
 }: {
@@ -120,7 +121,7 @@ function MessageItem({
       </div>
     </div>
   );
-}
+});
 
 export const MessageList = ({
   messages,
@@ -133,6 +134,8 @@ export const MessageList = ({
 }) => {
   const { containerRef, endRef, isAtBottom, scrollToBottom } =
     useScrollToBottom();
+
+  const handleScrollToBottom = useCallback(() => scrollToBottom("smooth"), [scrollToBottom]);
 
   return (
     <div className="relative flex-1">
@@ -172,7 +175,7 @@ export const MessageList = ({
             ? "pointer-events-none scale-0 opacity-0"
             : "pointer-events-auto scale-100 opacity-100"
         )}
-        onClick={() => scrollToBottom("smooth")}
+        onClick={handleScrollToBottom}
         type="button"
       >
         <ArrowDown className="size-4" />
