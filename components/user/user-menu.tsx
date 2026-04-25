@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { LogIn, Settings, HelpCircle, User as UserIcon, Link2, ChevronsUpDown } from "lucide-react";
+import { LogIn, LogOut, Settings, HelpCircle, User as UserIcon, Link2, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type UserMenuVariant = "icon" | "sidebar";
@@ -27,7 +27,7 @@ export function UserMenu({
   loginHref = "/chat",
   className,
 }: UserMenuProps) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   const email = user?.email ?? "";
   const displayName =
@@ -109,6 +109,14 @@ export function UserMenu({
                 <Link2 className="mr-2 h-4 w-4" />
                 <span>连接扩展</span>
               </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => signOut()}
+              className="text-red-600 focus:text-red-600 cursor-pointer"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>退出登录</span>
             </DropdownMenuItem>
           </>
         ) : (
