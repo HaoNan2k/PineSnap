@@ -35,53 +35,54 @@
 
 ## 4. 通用文章 extractor + DOM 工具
 
-- [ ] 4.1 新建 `shared/extractors/lib/dom-cleanup.js`：`expandLazyImages(doc)` / `removeSelectors(doc, selectors[])` / `stripTrackingParams(url)` / `normalizeSections(doc)`
-- [ ] 4.2 `__tests__/extensions/chrome-capture/lib/dom-cleanup.test.ts`：每个工具函数 1-2 个 fixture
-- [ ] 4.3 新建 `shared/extractors/generic-article.js`，provider 名 `generic_article_v1`
-- [ ] 4.4 使用 Defuddle 从 `document` 抽取 `{ markdown, title, author, publishedAt, cover, wordCount }`
-- [ ] 4.5 `sourceHtml` 快照：截取 `document.documentElement.outerHTML`，大小上限 500KB，超出截断并标注 diagnostics
-- [ ] 4.6 输出 payload `artifact = { kind: "extracted_text", format: "markdown", content: {...}, isPrimary: true }`
-- [ ] 4.7 抽取结果为空（markdown 长度 < 50 字符）时返回 `{ ok: false, code: "EXTRACT_EMPTY" }`
-- [ ] 4.8 `__tests__/extensions/chrome-capture/extractors/generic-article.test.ts`：fixture（普通博客 HTML + SPA 文档站 HTML） → 断言 markdown 非空、title 提取、edge case `EXTRACT_EMPTY`
+- [x] 4.1 新建 `shared/extractors/lib/dom-cleanup.js`：`expandLazyImages(doc)` / `removeSelectors(doc, selectors[])` / `stripTrackingParams(url)` / `normalizeSections(doc)`
+- [x] 4.2 `__tests__/extensions/chrome-capture/lib/dom-cleanup.test.ts`：每个工具函数 1-2 个 fixture
+- [x] 4.3 新建 `shared/extractors/generic-article.js`，provider 名 `generic_article_v1`
+- [x] 4.4 使用 Defuddle 从 `document` 抽取 `{ markdown, title, author, publishedAt, cover, wordCount }`
+- [x] 4.5 `sourceHtml` 快照：截取 `document.documentElement.outerHTML`，大小上限 500KB，超出截断并标注 diagnostics
+- [x] 4.6 输出 payload `artifact = { kind: "extracted_text", format: "markdown", content: {...}, isPrimary: true }`
+- [x] 4.7 抽取结果为空（markdown 长度 < 50 字符）时返回 `{ ok: false, code: "EXTRACT_EMPTY" }`
+- [x] 4.8 `__tests__/extensions/chrome-capture/extractors/generic-article.test.ts`：fake-Defuddle 单测覆盖 happy / EXTRACT_EMPTY / fallback content / Defuddle missing / sourceHtml 截断
 
 ## 5. 微信公众号 extractor
 
-- [ ] 5.1 新建 `shared/extractors/wechat-article.js`，provider 名 `wechat_article_v1`
-- [ ] 5.2 首选策略：Defuddle 抽取 + 公众号 hook（去尾部推荐、修复 `data-src` 懒加载占位、标准化 `<section>` 嵌套）
-- [ ] 5.3 从 `document` 拉取作者（公众号昵称）、发布时间、封面
-- [ ] 5.4 输出 `extracted_text + format=markdown` 契约
-- [ ] 5.5 URL 适配：`mp.weixin.qq.com/s` 路径命中
-- [ ] 5.6 `__tests__/extensions/chrome-capture/fixtures/wechat-article-normal.html` + `wechat-article-deleted.html`
-- [ ] 5.7 `__tests__/extensions/chrome-capture/extractors/wechat-article.test.ts`：fixture → 断言图片 src 正确、尾部推荐已去除
+- [x] 5.1 新建 `shared/extractors/wechat-article.js`，provider 名 `wechat_article_v1`
+- [x] 5.2 首选策略：Defuddle 抽取 + 公众号 hook（去尾部推荐、修复 `data-src` 懒加载占位、标准化 `<section>` 嵌套）
+- [x] 5.3 从 `document` 拉取作者（公众号昵称）、发布时间、封面
+- [x] 5.4 输出 `extracted_text + format=markdown` 契约
+- [x] 5.5 URL 适配：`mp.weixin.qq.com/s` 路径命中
+- [ ] 5.6 `__tests__/extensions/chrome-capture/fixtures/wechat-article-normal.html` + `wechat-article-deleted.html`（**等待用户提供真实 fixture**）
+- [x] 5.7 `__tests__/extensions/chrome-capture/extractors/wechat-article.test.ts`：mock DOM 单测覆盖 metadata 抽取 + 整体 happy + EXTRACT_EMPTY
 
 ## 6. 知乎 extractor
 
-- [ ] 6.1 新建 `shared/extractors/zhihu-answer.js`，provider 名 `zhihu_answer_v1`
-- [ ] 6.2 首选策略：Defuddle 抽取 + 知乎 hook（展开折叠答案、去尾部相关推荐）
-- [ ] 6.3 拉取作者、发布时间、赞同数到 `metadata.captureDiagnostics`
-- [ ] 6.4 输出 `extracted_text + format=markdown` 契约
-- [ ] 6.5 URL 适配：`zhihu.com/question/*/answer/*` 与 `zhuanlan.zhihu.com/p/*`
-- [ ] 6.6 `__tests__/extensions/chrome-capture/fixtures/zhihu-answer.html` + `zhihu-zhuanlan.html`
-- [ ] 6.7 `__tests__/extensions/chrome-capture/extractors/zhihu-answer.test.ts`：fixture → 断言折叠内容展开、作者字段非空
+- [x] 6.1 新建 `shared/extractors/zhihu-answer.js`，provider 名 `zhihu_answer_v1`
+- [x] 6.2 首选策略：Defuddle 抽取 + 知乎 hook（展开折叠答案、去尾部相关推荐）
+- [x] 6.3 拉取作者、发布时间、赞同数到 `metadata.captureDiagnostics`
+- [x] 6.4 输出 `extracted_text + format=markdown` 契约
+- [x] 6.5 URL 适配：`zhihu.com/question/*/answer/*` 与 `zhuanlan.zhihu.com/p/*`
+- [ ] 6.6 `__tests__/extensions/chrome-capture/fixtures/zhihu-answer.html` + `zhihu-zhuanlan.html`（**等待用户提供真实 fixture**）
+- [x] 6.7 `__tests__/extensions/chrome-capture/extractors/zhihu-answer.test.ts`：mock DOM 单测覆盖 expandFoldedAnswer / metadata / 整体 happy
 
 ## 7. YouTube extractor（P1）
 
-- [ ] 7.1 新建 `shared/extractors/youtube-subtitle.js`，provider 名 `youtube_subtitle_v1`
-- [ ] 7.2 参照 `bilibili-full-subtitle.js` 模式：抓字幕 track 列表 → 下载首选语言字幕 → 构建 transcript lines
-- [ ] 7.3 输出 `official_subtitle` 契约（复用视频型 schema）
-- [ ] 7.4 URL 适配：`youtube.com/watch`
-- [ ] 7.5 无字幕时返回 `NO_SUBTITLE_TRACK`（本次不做 ASR fallback）
-- [ ] 7.6 `__tests__/extensions/chrome-capture/fixtures/youtube-with-cc.html` + `youtube-no-cc.html`
-- [ ] 7.7 `__tests__/extensions/chrome-capture/extractors/youtube-subtitle.test.ts`：fixture → 断言字幕 lines 数、多语言首选选择
+- [x] 7.1 新建 `shared/extractors/youtube-subtitle.js`，provider 名 `youtube_subtitle_v1`
+- [x] 7.2 参照 `bilibili-full-subtitle.js` 模式：抓字幕 track 列表 → 下载首选语言字幕 → 构建 transcript lines
+- [x] 7.3 输出 `official_subtitle` 契约（复用视频型 schema）
+- [x] 7.4 URL 适配：`youtube.com/watch`
+- [x] 7.5 无字幕时返回 `NO_SUBTITLE_TRACK`（本次不做 ASR fallback）
+- [ ] 7.6 `__tests__/extensions/chrome-capture/fixtures/youtube-with-cc.html` + `youtube-no-cc.html`（**等待用户提供真实 fixture**）
+- [x] 7.7 `__tests__/extensions/chrome-capture/extractors/youtube-subtitle.test.ts`：单测覆盖 readInitialPlayerResponse / chooseTrack / parseTimedTextXml / 整体 happy + 4 个错误分支
 
-## 8. content.js 调度适配
+## 8. content.js + background.js 调度适配
 
-- [ ] 8.1 根据 extractor 返回的 `artifact.kind` 组装上传 payload，分派到 article / video 两种映射
-  - article：`kind: "extracted_text", format: "markdown", content: {...}` 直接打包
-  - video：`kind: "official_subtitle" | "asr_transcript"` 沿用现有 mediaCandidates 路径
-- [ ] 8.2 toast 文案泛化：B 站专用文案改为中性（"正在采集当前页..."）
-- [ ] 8.3 按钮 mount 策略：所有站点都 mount 入口按钮，extractor 返回失败时 toast 降级提示
-- [ ] 8.4 `describeTerminalFailure` 新增文章型错误码（`EXTRACT_EMPTY`、`EXTRACT_BLOCKED`、`NOT_AN_ARTICLE`）
+- [x] 8.1 background.js `uploadCapture` 不再硬编码 bilibili，按 `payload.sourceType` 分派 providerContext / title / jobType
+- [x] 8.2 toast 文案泛化（Phase A 已完成）
+- [x] 8.3 按钮 mount 策略：所有站点都 mount 入口按钮（Phase A 已完成）
+- [x] 8.4 `describeTerminalFailure` 新增文章型错误码（Phase A 已完成）
+- [x] 8.5 引用集中错误码与 `isFallbackable`（Phase A 已完成）
+- [x] 8.6 background.js `fetchJson` 加 `responseType: "text"` 支持，给 YouTube XML 字幕用
+- [x] 8.7 token scope 升级为 `capture:*` 通配符，扩展 token 一次拿全权限；revoke 改为按 label 不限 scope；新 label `PineSnap Capture 扩展` 与旧 `Bilibili 扩展` 在 connect 页兼容显示
 - [ ] 8.5 引用集中错误码与 `isFallbackable`，移除 content.js 内联的 switch
 
 ## 9. Schema 层契约更新（`extracted_text` 复用，**不**新增 article_markdown）

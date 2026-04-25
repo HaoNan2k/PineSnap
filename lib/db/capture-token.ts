@@ -121,6 +121,26 @@ export async function revokeCaptureTokensByScopeAndLabel(args: {
   return { revoked: result.count };
 }
 
+/**
+ * 按 label 撤销该用户所有未撤销 token，不限 scope。
+ * 用途：扩展授权重连时，无论旧 token 是 bilibili 专用还是通配符 capture:*，统一清理。
+ */
+export async function revokeCaptureTokensByLabel(args: {
+  userId: string;
+  label: string;
+}): Promise<{ revoked: number }> {
+  const result = await prisma.captureToken.updateMany({
+    where: {
+      userId: args.userId,
+      revokedAt: null,
+      label: args.label,
+    },
+    data: { revokedAt: new Date() },
+  });
+
+  return { revoked: result.count };
+}
+
 export async function verifyCaptureToken(args: {
   token: string;
   requiredScope: CaptureTokenScope;

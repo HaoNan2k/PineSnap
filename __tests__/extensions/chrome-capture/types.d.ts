@@ -20,46 +20,8 @@ export interface PineSnapCaptureGlobal {
       provider: string;
       matches: (url: string) => boolean;
       extract?: (ctx: unknown) => Promise<unknown>;
-      _internals?: {
-        getVideoContext: (doc: Document, urlOverride?: string) => {
-          url: string;
-          page: number;
-          bvid?: string;
-          aid?: number;
-          cid?: number;
-          title: string;
-          id?: string;
-          initialState: unknown;
-          playinfo: unknown;
-        };
-        buildSubtitlePayload: (
-          video: unknown,
-          result: unknown
-        ) => {
-          version: number;
-          sourceType: string;
-          artifact: { kind: string; format: string; isPrimary: boolean; content: unknown };
-          metadata: { platform: string; captureDiagnostics: Record<string, unknown> };
-        };
-        buildAsrFallbackPayload: (
-          video: unknown,
-          code: string,
-          attempts: unknown[]
-        ) => {
-          version: number;
-          sourceType: string;
-          mediaCandidates: unknown[];
-          metadata: {
-            captureDiagnostics: { asrFallback: boolean; subtitleFailCode: string };
-          };
-        };
-        extractMediaCandidates: (playinfo: unknown) => Array<{
-          kind: string;
-          url: string;
-          mimeType: string;
-          bitrateKbps?: number;
-        }>;
-      };
+      // 各 extractor 的 _internals 形状不同，按 extractor 自己 cast
+      _internals?: Record<string, unknown>;
     }
   >;
   registry?: {

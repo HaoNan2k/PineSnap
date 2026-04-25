@@ -2,7 +2,7 @@ import { createContext } from "@/server/context";
 import { LearnHeader } from "@/components/learn/learn-header";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
-import { revokeCaptureTokensByScopeAndLabel } from "@/lib/db/capture-token";
+import { revokeCaptureTokensByLabel } from "@/lib/db/capture-token";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -14,7 +14,9 @@ import {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-const CHROME_EXTENSION_LABEL = "Bilibili 扩展";
+// 历史 label "Bilibili 扩展"（capture:bilibili 单 scope）+ 新 label "PineSnap Capture 扩展"（capture:* 通配符）。
+// "已连接" 检查与 disconnect 都把两者一起算。
+const EXTENSION_LABELS = ["PineSnap Capture 扩展", "Bilibili 扩展"];
 const CHROME_EXTENSION_STORE_URL =
   process.env.NEXT_PUBLIC_CHROME_EXTENSION_STORE_URL?.trim() || null;
 
@@ -33,8 +35,7 @@ export default async function Page() {
     where: {
       userId,
       revokedAt: null,
-      scopes: { has: "capture:bilibili" },
-      label: CHROME_EXTENSION_LABEL,
+      label: { in: EXTENSION_LABELS },
     },
   });
 
@@ -43,11 +44,9 @@ export default async function Page() {
   async function disconnect() {
     "use server";
 
-    await revokeCaptureTokensByScopeAndLabel({
-      userId,
-      scope: "capture:bilibili",
-      label: CHROME_EXTENSION_LABEL,
-    });
+    for (const label of EXTENSION_LABELS) {
+      await revokeCaptureTokensByLabel({ userId, label });
+    }
     revalidatePath("/connect/bilibili");
   }
 
