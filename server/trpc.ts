@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from "@trpc/server";
-import { type Context } from "./context";
+import { type Context, resolveUserRole } from "./context";
 import { ZodError } from "zod";
 
 const t = initTRPC.context<Context>().create({
@@ -27,6 +27,19 @@ export const protectedProcedure = t.procedure.use(async (opts) => {
     ctx: {
       ...opts.ctx,
       user: opts.ctx.user,
+    },
+  });
+});
+
+export const adminProcedure = protectedProcedure.use(async (opts) => {
+  const role = await resolveUserRole(opts.ctx.supabase);
+  if (role !== "admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Admin role required" });
+  }
+  return opts.next({
+    ctx: {
+      ...opts.ctx,
+      user: { ...opts.ctx.user, role },
     },
   });
 });

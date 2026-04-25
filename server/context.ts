@@ -38,4 +38,25 @@ export async function createContext(opts?: { req?: Request }) {
   };
 }
 
+export type UserRole = "admin" | "user";
+
+// Resolves the current user's role on demand from Supabase app_metadata.
+// Kept off the hot path (createContext) so header-fast-path requests don't pay
+// for an extra getUser() call. adminProcedure invokes this only when needed.
+export async function resolveUserRole(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>
+): Promise<UserRole> {
+  const { data } = await supabase.auth.getUser();
+  const meta = data.user?.app_metadata;
+  if (
+    meta &&
+    typeof meta === "object" &&
+    "role" in meta &&
+    (meta as { role: unknown }).role === "admin"
+  ) {
+    return "admin";
+  }
+  return "user";
+}
+
 export type Context = Awaited<ReturnType<typeof createContext>>;

@@ -91,6 +91,13 @@ PineSnap 是一个基于 React 的 AI 应用。
 - Next.js
 - TypeScript
 
+## 本地开发环境
+
+- **本地访问域名是 `http://pinesnap.test:3000`**，不是 `localhost:3000`
+- `/etc/hosts` 已配 `127.0.0.1 pinesnap.test artifact.pinesnap.test`；`artifact.pinesnap.test:3000` 是同一个 dev server 的别名，用于 capture artifact 的存储/下载链路（通过 Host 头区分行为）
+- 浏览器测试、CORS / cookie / Supabase redirect 调试都用 `pinesnap.test` 域名
+- 详细说明：`docs/tooling/local-dev-environment.md`
+
 ## 竞品调研
 
 竞品分析文档位于 `docs/competitive-research/`。在讨论产品方向、功能设计或差异化时参考这些文档。
