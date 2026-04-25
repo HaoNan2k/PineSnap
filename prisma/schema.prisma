@@ -194,10 +194,8 @@ enum ConversationKind {
 
 enum CaptureSourceType {
   bilibili
-  wechat_article
   web_page
   youtube
-  xiaohongshu
   douyin
 }
 
@@ -228,7 +226,6 @@ enum CaptureJobType {
   subtitle_fetch
   audio_transcribe
   web_extract
-  article_extract
   summary_generate
   media_ingest
 }

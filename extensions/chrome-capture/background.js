@@ -182,6 +182,13 @@ async function fetchJson(url, options = {}) {
  * 把 extractor 输出的 payload 翻译成服务端 captureContext + artifact。
  * 按 payload.sourceType 分派 providerContext 形状。
  */
+// Phase C：webPage.extractor 必须落在 zod enum 内（generic_article_v1 / wechat_article_v1 / zhihu_answer_v1）
+const ALLOWED_WEB_PAGE_EXTRACTORS = new Set([
+  "generic_article_v1",
+  "wechat_article_v1",
+  "zhihu_answer_v1",
+]);
+
 function buildProviderContext(sourceType, sourceId, payload) {
   if (sourceType === "bilibili") {
     return { bilibili: { bvid: sourceId || undefined } };
@@ -190,11 +197,16 @@ function buildProviderContext(sourceType, sourceId, payload) {
     return { youtube: { videoId: sourceId || undefined } };
   }
   if (sourceType === "web_page") {
-    // Phase B：仍走当前 webPage zod schema（titleHint / selectorHints）
-    // Phase C 会加 extractor 字段，届时把诊断里的 provider id 提到这里
     const titleHint =
       typeof payload?.metadata?.title === "string" ? payload.metadata.title : undefined;
-    return titleHint ? { webPage: { titleHint } } : {};
+    const rawExtractor = payload?.metadata?.captureDiagnostics?.provider;
+    const extractor = ALLOWED_WEB_PAGE_EXTRACTORS.has(rawExtractor)
+      ? rawExtractor
+      : undefined;
+    const webPage = {};
+    if (titleHint) webPage.titleHint = titleHint;
+    if (extractor) webPage.extractor = extractor;
+    return Object.keys(webPage).length > 0 ? { webPage } : {};
   }
   return {};
 }
