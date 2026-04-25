@@ -39,6 +39,7 @@ docs/
 
 ### tooling/ 开发工具
 - `claude-code-plugin-skill-guide.md` — Claude Code 插件/Skill/命令参考
+- `multi-session-worktree.md` — 多会话冲突时切 worktree 的操作手册
 
 ## 按类型导航（跨领域）
 
