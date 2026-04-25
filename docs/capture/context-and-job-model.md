@@ -50,13 +50,36 @@
 | `accessContext.userAgent` | 客户端 UA | 调试兼容 |
 | `mediaCandidates[]` | 候选媒体 | 下载/转写优化 |
 
-### 3.3 providerContext 扩展
+### 3.3 sourceType 取值（Phase C 收敛后）
 
-- `bilibili`: `bvid/aid/cid/p`
-- `youtube`: `videoId/channelId/playlistId`
-- `wechatArticle`: `biz/mid/idx/sn`
-- `webPage`: `titleHint/selectorHints`
-- `xiaohongshu`: `noteId/userId`
+| 值 | 用途 | inferJobTypeFromSource |
+|----|------|----------------------|
+| `bilibili` | B 站视频 | `audio_transcribe` |
+| `youtube` | YouTube 视频 | `audio_transcribe` |
+| `douyin` | 抖音视频 | `audio_transcribe` |
+| `web_page` | 所有非视频源（博客 / 公众号 / 知乎 / 文档站等） | `web_extract` |
+
+之前的 `wechat_article` / `xiaohongshu` 已删除，统一并入 `web_page`，靠 `providerContext.webPage.extractor` 字段区分站点。
+
+### 3.4 jobType 取值（Phase C 收敛后）
+
+| 值 | handler | 备注 |
+|----|---------|------|
+| `audio_transcribe` | worker → AssemblyAI | 视频源字幕失败 ASR fallback |
+| `subtitle_fetch` | 扩展端预抽 → API 同步落库（不进队列） | bilibili / youtube 字幕直采 |
+| `web_extract` | 同上 | 文章型 extractor 直采 |
+| `summary_generate` / `media_ingest` | 暂未启用 | 预留 |
+
+之前的 `article_extract` 已删除（与 `web_extract` 完全语义重叠）。
+
+### 3.5 providerContext 扩展
+
+| Provider | 字段 | 备注 |
+|----------|------|------|
+| `bilibili` | `bvid` / `aid` / `cid` / `p` | 视频元信息 |
+| `youtube` | `videoId` / `channelId` / `playlistId` | 视频元信息 |
+| `douyin` | `awemeId` / `secUid` | 视频元信息 |
+| `webPage` | `titleHint` / `selectorHints` / **`extractor`** | `extractor` zod enum：`generic_article_v1` / `wechat_article_v1` / `zhihu_answer_v1`，下游按此区分站点 |
 
 ## 4. 约束与状态规则
 

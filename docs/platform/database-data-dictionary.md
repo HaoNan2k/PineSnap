@@ -139,6 +139,54 @@
 
 扩展/API 调用令牌（只存 hash，不存明文），含 `scopes`、`revokedAt`、`lastUsedAt`。
 
+新版扩展（`PineSnap Capture 扩展` label）发的 token 携带 `capture:*` 通配符 scope，覆盖所有源；旧版 token（`Bilibili 扩展` label，scope `capture:bilibili`）仍可采集 bilibili。撤销时按 label 不限 scope，新旧 label 一并清理。
+
 ### CaptureAuthCode
 
 一次性授权码（短 TTL + 单次消费），用于扩展连接握手。
+
+## Capture 枚举（Phase C 收敛后）
+
+### CaptureSourceType
+
+| 值 | 含义 | 备注 |
+|---|------|------|
+| `bilibili` | B 站视频 | |
+| `youtube` | YouTube 视频 | |
+| `douyin` | 抖音视频 | 暂未实现 extractor |
+| `web_page` | 所有非视频源（博客 / 公众号 / 知乎 / 文档站等） | 站点区分依赖 `providerContext.webPage.extractor` |
+
+`wechat_article` / `xiaohongshu` 在 Phase C migration `20260425143247_consolidate_source_and_job_types` 中删除，统一并入 `web_page`。
+
+### CaptureJobType
+
+| 值 | 触发场景 |
+|---|---------|
+| `subtitle_fetch` | bilibili / youtube 字幕扩展端预抽 → API 同步落库（不进 worker 队列） |
+| `audio_transcribe` | bilibili 字幕失败 → ASR fallback；进 worker 队列由 AssemblyAI 转写 |
+| `web_extract` | 文章型扩展端预抽 → API 同步落库（不进队列） |
+| `summary_generate` | 暂未启用 |
+| `media_ingest` | 暂未启用 |
+
+`article_extract` 在 Phase C 删除（与 `web_extract` 完全语义重叠，无 handler 区分）。
+
+### CaptureArtifactKind / CaptureArtifactFormat
+
+| Kind | Format | 含义 |
+|------|--------|------|
+| `official_subtitle` | `cue_lines` | 视频官方字幕（bilibili / youtube）|
+| `asr_transcript` | `cue_lines` | ASR 转写结果（AssemblyAI）|
+| `extracted_text` | `markdown` | 文章型抽取正文（generic / wechat / zhihu）|
+| `summary` | `json` | AI 摘要（暂未启用为主产物） |
+| `extracted_text` | `plain_text` | 暂未使用 |
+| 其他 kind | `binary_ref` | 暂未使用 |
+
+文章型 `content` 结构：`{ markdown, title, author?, publishedAt?, cover?, sourceHtml?, wordCount? }`。
+
+### providerContext.webPage.extractor (zod enum)
+
+| 值 | 对应扩展端 SITE_ADAPTERS provider |
+|---|----------------------------------|
+| `generic_article_v1` | 通用兜底（Defuddle）|
+| `wechat_article_v1` | 微信公众号 |
+| `zhihu_answer_v1` | 知乎答案 / 专栏 |
