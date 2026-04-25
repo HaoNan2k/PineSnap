@@ -3,7 +3,7 @@ import { getCaptureCorsHeaders } from "@/lib/capture/cors";
 import { consumeCaptureAuthCode } from "@/lib/db/capture-auth-code";
 import {
   createCaptureToken,
-  revokeCaptureTokensByScopeAndLabel,
+  revokeCaptureTokensByLabel,
 } from "@/lib/db/capture-token";
 
 const exchangeBodySchema = z.object({
@@ -19,7 +19,10 @@ const exchangeBodySchema = z.object({
     ),
 });
 
-const DEFAULT_LABEL = "Bilibili 扩展";
+// Phase B：扩展从单源（bilibili）演进为多源采集，token 不再绑定单一 scope。
+// 旧 label "Bilibili 扩展" 仍兼容，但新 label 描述实际用途。
+const DEFAULT_LABEL = "PineSnap Capture 扩展";
+const LEGACY_LABEL = "Bilibili 扩展";
 
 function getExchangeErrorDescription(code: "invalid_request" | "invalid_grant"): string {
   if (code === "invalid_request") {
@@ -74,16 +77,15 @@ export async function POST(req: Request) {
     );
   }
 
-  await revokeCaptureTokensByScopeAndLabel({
-    userId: consumed.userId,
-    scope: "capture:bilibili",
-    label,
-  });
+  // 撤销同一用户在新 / 旧 label 下任何未撤销的扩展 token
+  await revokeCaptureTokensByLabel({ userId: consumed.userId, label });
+  await revokeCaptureTokensByLabel({ userId: consumed.userId, label: LEGACY_LABEL });
 
+  // 通配符 scope，覆盖 bilibili / youtube / web_page / wechat_article 等所有当前与未来源
   const { token, record } = await createCaptureToken({
     userId: consumed.userId,
     label,
-    scopes: ["capture:bilibili"],
+    scopes: ["capture:*"],
   });
 
   return Response.json(

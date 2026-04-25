@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PineSnap Capture",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Capture web articles, video subtitles and other content into PineSnap.",
   "permissions": ["storage", "identity"],
   "host_permissions": [
@@ -16,9 +16,14 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "dist/defuddle.bundle.js",
         "shared/runtime.js",
         "shared/extractors/lib/dom-cleanup.js",
         "shared/extractors/bilibili-full-subtitle.js",
+        "shared/extractors/generic-article.js",
+        "shared/extractors/wechat-article.js",
+        "shared/extractors/zhihu-answer.js",
+        "shared/extractors/youtube-subtitle.js",
         "shared/extractor-registry.js",
         "content.js"
       ],

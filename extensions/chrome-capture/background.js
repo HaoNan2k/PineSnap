@@ -135,7 +135,12 @@ async function fetchJson(url, options = {}) {
   if (!requestedCredentials) {
     try {
       const target = new URL(url);
-      if (target.hostname === "api.bilibili.com") {
+      // 站点 API 拉取需要带用户登录态（B 站、YouTube 等），但只在已知白名单内允许
+      if (
+        target.hostname === "api.bilibili.com" ||
+        target.hostname.endsWith(".youtube.com") ||
+        target.hostname === "youtube.com"
+      ) {
         credentials = "include";
       }
     } catch {
@@ -157,6 +162,15 @@ async function fetchJson(url, options = {}) {
     };
   }
 
+  // YouTube timedtext 等返回 XML / 纯文本时通过 responseType: "text" 走 text 解析
+  if (options.responseType === "text") {
+    return {
+      ok: true,
+      status: response.status,
+      data: await response.text(),
+    };
+  }
+
   return {
     ok: true,
     status: response.status,
@@ -164,19 +178,58 @@ async function fetchJson(url, options = {}) {
   };
 }
 
+/**
+ * 把 extractor 输出的 payload 翻译成服务端 captureContext + artifact。
+ * 按 payload.sourceType 分派 providerContext 形状。
+ */
+function buildProviderContext(sourceType, sourceId, payload) {
+  if (sourceType === "bilibili") {
+    return { bilibili: { bvid: sourceId || undefined } };
+  }
+  if (sourceType === "youtube") {
+    return { youtube: { videoId: sourceId || undefined } };
+  }
+  if (sourceType === "web_page") {
+    // Phase B：仍走当前 webPage zod schema（titleHint / selectorHints）
+    // Phase C 会加 extractor 字段，届时把诊断里的 provider id 提到这里
+    const titleHint =
+      typeof payload?.metadata?.title === "string" ? payload.metadata.title : undefined;
+    return titleHint ? { webPage: { titleHint } } : {};
+  }
+  return {};
+}
+
+function buildResourceTitle(sourceType, payload) {
+  const raw =
+    typeof payload?.metadata?.title === "string" ? payload.metadata.title.trim() : "";
+  if (!raw) {
+    if (sourceType === "bilibili") return "B站采集";
+    if (sourceType === "youtube") return "YouTube 采集";
+    if (sourceType === "web_page") return "网页采集";
+    return "PineSnap 采集";
+  }
+  if (sourceType === "bilibili") return `B站：${raw}`.slice(0, 80);
+  if (sourceType === "youtube") return `YouTube：${raw}`.slice(0, 80);
+  return raw.slice(0, 200);
+}
+
 async function uploadCapture(baseUrl, token, payload) {
+  const sourceType =
+    typeof payload?.sourceType === "string" && payload.sourceType.trim()
+      ? payload.sourceType.trim()
+      : "web_page";
   const sourceUrl =
     typeof payload?.metadata?.url === "string" && payload.metadata.url.trim()
       ? payload.metadata.url.trim()
       : "";
   const sourceId =
     typeof payload?.metadata?.id === "string" ? payload.metadata.id : "";
+
+  // 幂等键：source URL + source id + provider id 组合的 sha256 前 32 位
   const provider =
-    typeof payload?.content?.transcript?.provider === "string"
-      ? payload.content.transcript.provider
-      : typeof payload?.content?.summary?.provider === "string"
-        ? payload.content.summary.provider
-        : "unknown";
+    payload?.metadata?.captureDiagnostics?.provider ||
+    payload?.artifact?.content?.transcript?.provider ||
+    "unknown";
   const digestInput = `${sourceUrl}|${sourceId}|${provider}`;
   const digestBuffer = await crypto.subtle.digest(
     "SHA-256",
@@ -187,28 +240,13 @@ async function uploadCapture(baseUrl, token, payload) {
     .join("");
   const captureRequestId = digestHex.slice(0, 32);
 
-  let artifact = null;
-  if (payload?.content?.transcript) {
-    artifact = {
-      kind: "official_subtitle",
-      language:
-        typeof payload.content.transcript.language === "string"
-          ? payload.content.transcript.language
-          : undefined,
-      format: "cue_lines",
-      content: payload.content.transcript,
-      isPrimary: true,
-    };
-  } else if (payload?.content?.summary) {
-    artifact = {
-      kind: "summary",
-      format: "json",
-      content: payload.content.summary,
-      isPrimary: true,
-    };
-  }
+  // extractor 已在自身 payload.artifact 里组装好了完整 artifact 字段
+  const artifact =
+    payload?.artifact && typeof payload.artifact === "object"
+      ? payload.artifact
+      : undefined;
 
-  // mediaCandidates 和 accessContext 由 content.js 在字幕失败 fallback 时提供
+  // bilibili 字幕失败回退到 ASR 时由 extractor 在 payload 顶层挂上
   const mediaCandidates = Array.isArray(payload?.mediaCandidates)
     ? payload.mediaCandidates
     : undefined;
@@ -217,31 +255,30 @@ async function uploadCapture(baseUrl, token, payload) {
       ? payload.accessContext
       : undefined;
 
+  // 没带 artifact 的视频型走 ASR worker（仅 bilibili 会走到这）
+  const fallbackJobType =
+    !artifact && sourceType === "bilibili" ? "audio_transcribe" : undefined;
+
   const requestBody = {
     captureContext: {
       schemaVersion: 1,
-      sourceType: "bilibili",
+      sourceType,
       sourceUrl,
       captureRequestId,
       capturedAt: new Date().toISOString(),
       accessContext,
       mediaCandidates,
-      providerContext: {
-        bilibili: {
-          bvid: sourceId || undefined,
-        },
-      },
+      providerContext: buildProviderContext(sourceType, sourceId, payload),
     },
-    jobType: artifact ? undefined : "audio_transcribe",
-    title:
-      typeof payload?.metadata?.title === "string" && payload.metadata.title.trim()
-        ? `B站：${payload.metadata.title.trim()}`.slice(0, 80)
-        : "B站采集",
+    jobType: fallbackJobType,
+    title: buildResourceTitle(sourceType, payload),
     thumbnailUrl:
       typeof payload?.metadata?.cover === "string" && payload.metadata.cover.trim()
         ? payload.metadata.cover.trim()
-        : undefined,
-    artifact: artifact || undefined,
+        : artifact?.content?.cover && typeof artifact.content.cover === "string"
+          ? artifact.content.cover.trim()
+          : undefined,
+    artifact,
   };
 
   const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/capture/jobs`, {

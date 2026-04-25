@@ -6,6 +6,53 @@ import {
 } from "../test-utils";
 import type {} from "../types";
 
+interface BilibiliInternals {
+  getVideoContext: (
+    doc: Document,
+    urlOverride?: string
+  ) => {
+    url: string;
+    page: number;
+    bvid?: string;
+    title: string;
+    id?: string;
+    initialState: unknown;
+    playinfo: unknown;
+  };
+  buildSubtitlePayload: (
+    video: unknown,
+    result: unknown
+  ) => {
+    version: number;
+    sourceType: string;
+    artifact: { kind: string; format: string; isPrimary: boolean; content: unknown };
+    metadata: { platform: string; captureDiagnostics: Record<string, unknown> };
+  };
+  buildAsrFallbackPayload: (
+    video: unknown,
+    code: string,
+    attempts: unknown[]
+  ) => {
+    version: number;
+    sourceType: string;
+    mediaCandidates: unknown[];
+    metadata: {
+      captureDiagnostics: { asrFallback: boolean; subtitleFailCode: string };
+    };
+  };
+  extractMediaCandidates: (playinfo: unknown) => Array<{
+    kind: string;
+    url: string;
+    mimeType: string;
+    bitrateKbps?: number;
+  }>;
+}
+
+function bilibiliInternals(): BilibiliInternals {
+  return globalThis.PineSnapCapture.extractors!.bilibili_full_subtitle_v1
+    ._internals as unknown as BilibiliInternals;
+}
+
 describe("bilibili-full-subtitle extractor", () => {
   beforeEach(() => {
     resetCaptureGlobal();
@@ -31,10 +78,10 @@ describe("bilibili-full-subtitle extractor", () => {
 
     it("exposes _internals for content.js fallback decision", () => {
       const ext = globalThis.PineSnapCapture.extractors!.bilibili_full_subtitle_v1;
-      expect(typeof ext._internals!.getVideoContext).toBe("function");
-      expect(typeof ext._internals!.buildSubtitlePayload).toBe("function");
-      expect(typeof ext._internals!.buildAsrFallbackPayload).toBe("function");
-      expect(typeof ext._internals!.extractMediaCandidates).toBe("function");
+      expect(typeof bilibiliInternals().getVideoContext).toBe("function");
+      expect(typeof bilibiliInternals().buildSubtitlePayload).toBe("function");
+      expect(typeof bilibiliInternals().buildAsrFallbackPayload).toBe("function");
+      expect(typeof bilibiliInternals().extractMediaCandidates).toBe("function");
     });
   });
 
@@ -61,7 +108,7 @@ describe("bilibili-full-subtitle extractor", () => {
         },
         diagnostics: { lineCount: 2, selectedLanguage: "zh-CN" },
       };
-      const payload = ext._internals!.buildSubtitlePayload(video, result);
+      const payload = bilibiliInternals().buildSubtitlePayload(video, result);
       expect(payload.version).toBe(1);
       expect(payload.sourceType).toBe("bilibili");
       expect(payload.artifact.kind).toBe("official_subtitle");
@@ -94,7 +141,7 @@ describe("bilibili-full-subtitle extractor", () => {
           },
         },
       };
-      const payload = ext._internals!.buildAsrFallbackPayload(
+      const payload = bilibiliInternals().buildAsrFallbackPayload(
         video,
         "NO_SUBTITLE_TRACK",
         [{ provider: "bilibili_full_subtitle_v1", ok: false, code: "NO_SUBTITLE_TRACK" }]
@@ -112,7 +159,7 @@ describe("bilibili-full-subtitle extractor", () => {
 
     it("returns empty mediaCandidates when playinfo missing audio", () => {
       const ext = globalThis.PineSnapCapture.extractors!.bilibili_full_subtitle_v1;
-      const payload = ext._internals!.buildAsrFallbackPayload(
+      const payload = bilibiliInternals().buildAsrFallbackPayload(
         { id: "BV1", url: "https://www.bilibili.com/video/BV1", title: "x", playinfo: null },
         "NO_SUBTITLE_TRACK",
         []
@@ -124,7 +171,7 @@ describe("bilibili-full-subtitle extractor", () => {
   describe("extractMediaCandidates", () => {
     it("normalizes baseUrl/base_url field variance", () => {
       const ext = globalThis.PineSnapCapture.extractors!.bilibili_full_subtitle_v1;
-      const candidates = ext._internals!.extractMediaCandidates({
+      const candidates = bilibiliInternals().extractMediaCandidates({
         data: {
           dash: {
             audio: [
@@ -144,9 +191,9 @@ describe("bilibili-full-subtitle extractor", () => {
 
     it("returns [] for missing playinfo or empty audio array", () => {
       const ext = globalThis.PineSnapCapture.extractors!.bilibili_full_subtitle_v1;
-      expect(ext._internals!.extractMediaCandidates(null)).toEqual([]);
-      expect(ext._internals!.extractMediaCandidates({})).toEqual([]);
-      expect(ext._internals!.extractMediaCandidates({ data: { dash: { audio: [] } } })).toEqual([]);
+      expect(bilibiliInternals().extractMediaCandidates(null)).toEqual([]);
+      expect(bilibiliInternals().extractMediaCandidates({})).toEqual([]);
+      expect(bilibiliInternals().extractMediaCandidates({ data: { dash: { audio: [] } } })).toEqual([]);
     });
   });
 
@@ -160,7 +207,7 @@ describe("bilibili-full-subtitle extractor", () => {
         return;
       }
       const ext = globalThis.PineSnapCapture.extractors!.bilibili_full_subtitle_v1;
-      const video = ext._internals!.getVideoContext(
+      const video = bilibiliInternals().getVideoContext(
         doc,
         "https://www.bilibili.com/video/BVxxxxxxxxxx"
       );
