@@ -1,11 +1,13 @@
 import "server-only";
 
-import { generateText } from "ai";
+import { generateObject } from "ai";
+
 import {
   PROMPT_VERSION,
   buildSummarySystemPrompt,
   buildSummaryUserMessage,
 } from "./prompt";
+import { SummaryOutputSchema, type SummaryOutput } from "./schema";
 
 const MODEL_ID = "anthropic/claude-sonnet-4-6";
 
@@ -16,8 +18,7 @@ export interface GenerateSummaryInput {
   content: unknown;
 }
 
-export interface GenerateSummaryResult {
-  html: string;
+export interface GenerateSummaryResult extends SummaryOutput {
   durationMs: number;
   modelId: string;
   promptVersion: string;
@@ -30,8 +31,9 @@ export async function generateSummary(
   const userMessage = buildSummaryUserMessage(input);
 
   const start = Date.now();
-  const { text } = await generateText({
+  const { object } = await generateObject({
     model: MODEL_ID,
+    schema: SummaryOutputSchema,
     system,
     prompt: userMessage,
     maxRetries: 1,
@@ -39,7 +41,7 @@ export async function generateSummary(
   const durationMs = Date.now() - start;
 
   return {
-    html: text,
+    ...object,
     durationMs,
     modelId: MODEL_ID,
     promptVersion: PROMPT_VERSION,

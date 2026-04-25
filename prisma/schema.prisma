@@ -83,10 +83,27 @@ model Resource {
   updatedAt  DateTime          @updatedAt
   learnings  LearningResource[]
   captureJobs CaptureJob[]
+  summary    ResourceSummary?
 
   @@index([userId])
   @@index([userId, sourceType])
   @@index([userId, sourceFingerprint])
+}
+
+model ResourceSummary {
+  id              String   @id @default(uuid(7))
+  resourceId      String   @unique
+  userId          String
+  markdown        String
+  oneLineSummary  String
+  keyMoments      Json     @default("[]")
+  model           String
+  promptVersion   String
+  durationMs      Int
+  generatedAt     DateTime @default(now())
+  resource        Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, generatedAt])
 }
 
 model CaptureJob {

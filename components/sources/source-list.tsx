@@ -2,6 +2,7 @@
 
 import { trpc, getTrpcErrorCode } from "@/lib/trpc/react";
 import { memo, useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -10,11 +11,13 @@ import {
   AlertCircle,
   ArrowUpDown,
   Check,
+  CheckCircle2,
   Globe,
   Inbox,
   Layers,
   Loader2,
   MessageSquare,
+  Sparkles,
   Video,
   Youtube,
 } from "lucide-react";
@@ -27,6 +30,7 @@ type SourceListItem = {
   thumbnailUrl?: string | null;
   createdAt: string | Date;
   activeJob?: { status?: string } | null;
+  summary?: { oneLineSummary: string } | null;
 };
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -43,6 +47,7 @@ export function SourceList() {
   const resources = useMemo(() => (data ?? []) as unknown as SourceListItem[], [data]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedCount = selectedIds.length;
+  const selectionMode = selectedCount > 0;
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
 
   const createLearning = trpc.learning.create.useMutation({
@@ -173,6 +178,7 @@ export function SourceList() {
                 key={resource.id}
                 resource={resource}
                 selected={selectedSet.has(resource.id)}
+                selectionMode={selectionMode}
                 onToggleSelected={toggleSelected}
                 disabled={createLearning.isPending}
               />
@@ -193,11 +199,13 @@ export function SourceList() {
 const ResourceCard = memo(function ResourceCard({
   resource,
   selected,
+  selectionMode,
   onToggleSelected,
   disabled,
 }: {
   resource: SourceListItem;
   selected: boolean;
+  selectionMode: boolean;
   onToggleSelected: (id: string) => void;
   disabled: boolean;
 }) {
@@ -205,24 +213,21 @@ const ResourceCard = memo(function ResourceCard({
   const dateFormatted = format(new Date(resource.createdAt), "M月d日", {
     locale: zhCN,
   });
-  const typeLabel = getTypeLabel(resource.sourceType);
   const TypeIcon = TYPE_ICONS[resource.sourceType] ?? Layers;
+  const oneLineSummary = resource.summary?.oneLineSummary ?? null;
+  const hasSummary = !!oneLineSummary;
 
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onToggleSelected(resource.id)}
-      aria-pressed={selected}
-      className={[
-        "group relative flex flex-col gap-4 border p-4 rounded-2xl transition-all text-left",
-        "bg-white dark:bg-card shadow-sm hover:shadow-md",
-        selected
-          ? "border-primary/60 ring-2 ring-primary/15"
-          : "border-gray-100 dark:border-gray-800 hover:border-sand",
-        disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
-      ].join(" ")}
-    >
+  const cardClass = [
+    "group relative flex flex-col gap-4 border p-4 rounded-2xl transition-all text-left",
+    "bg-white dark:bg-card shadow-sm hover:shadow-md",
+    selected
+      ? "border-primary/60 ring-2 ring-primary/15"
+      : "border-gray-100 dark:border-gray-800 hover:border-sand",
+    disabled ? "opacity-60 cursor-not-allowed pointer-events-none" : "cursor-pointer",
+  ].join(" ");
+
+  const inner = (
+    <>
       <div className="relative w-full aspect-[4/3] rounded-xl border border-sand/40 bg-sand/10 flex items-center justify-center overflow-hidden">
         {resource.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -234,7 +239,13 @@ const ResourceCard = memo(function ResourceCard({
         ) : (
           <TypeIcon className="h-9 w-9 text-primary" aria-hidden />
         )}
-        <div className="absolute top-3 right-3 flex items-center gap-2">
+        <div
+          className="absolute top-3 right-3 flex items-center gap-2"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
           {selected ? (
             <span className="inline-flex items-center justify-center size-7 rounded-full bg-primary text-white shadow-sm">
               <Check className="h-4 w-4" aria-hidden />
@@ -245,13 +256,13 @@ const ResourceCard = memo(function ResourceCard({
             checked={selected}
             onChange={() => onToggleSelected(resource.id)}
             onClick={(event) => event.stopPropagation()}
-            className="size-4 accent-primary"
+            className="size-4 accent-primary cursor-pointer"
             aria-label="选择素材"
           />
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 min-w-0">
+      <div className="flex flex-col gap-1.5 min-w-0">
         <div className="flex items-center justify-between gap-3">
           <span className="bg-sand/20 text-primary dark:text-sand text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded">
             来自 {sourceLabel}
@@ -263,17 +274,48 @@ const ResourceCard = memo(function ResourceCard({
         <h3 className="font-serif text-lg text-[#131614] dark:text-white font-medium line-clamp-2">
           {resource.title}
         </h3>
-        <p className="text-sm text-forest-muted truncate">
-          {typeLabel}
-        </p>
-        <p className="text-xs text-forest-muted/80 truncate">
-          {resource.canonicalUrl}
-        </p>
-        <p className="text-xs text-forest-muted/90 truncate">
-          {getStatusLabel(resource.activeJob?.status)}
-        </p>
+        {hasSummary ? (
+          <>
+            <p className="text-sm text-forest-muted line-clamp-2 leading-snug">
+              {oneLineSummary}
+            </p>
+            <p className="inline-flex items-center gap-1 text-[11px] text-forest font-medium mt-0.5">
+              <CheckCircle2 className="w-3 h-3" aria-hidden />
+              已总结
+            </p>
+          </>
+        ) : (
+          <p className="inline-flex items-center gap-1 text-xs text-forest-muted/80 mt-0.5">
+            <Sparkles className="w-3 h-3" aria-hidden />
+            点击生成总结
+          </p>
+        )}
       </div>
-    </button>
+    </>
+  );
+
+  if (selectionMode) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onToggleSelected(resource.id)}
+        aria-pressed={selected}
+        className={cardClass}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      href={`/sources/${resource.id}`}
+      aria-disabled={disabled}
+      className={cardClass}
+    >
+      {inner}
+    </Link>
   );
 });
 
@@ -286,25 +328,4 @@ function getSourceLabel(sourceType: string): string {
     xiaohongshu: "小红书",
   };
   return labels[sourceType] ?? "其他";
-}
-
-function getTypeLabel(sourceType: string): string {
-  const labels: Record<string, string> = {
-    bilibili: "视频素材",
-    wechat_article: "文章素材",
-    web_page: "网页素材",
-    youtube: "视频素材",
-    xiaohongshu: "图文素材",
-  };
-  return labels[sourceType] ?? "素材";
-}
-
-function getStatusLabel(status?: string): string {
-  if (!status) return "未开始处理";
-  if (status === "PENDING") return "排队中";
-  if (status === "RUNNING") return "处理中";
-  if (status === "SUCCEEDED") return "已完成";
-  if (status === "FAILED") return "处理失败";
-  if (status === "CANCELLED") return "已取消";
-  return "状态未知";
 }

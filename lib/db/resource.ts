@@ -52,6 +52,9 @@ export async function getUserResources(userId: string) {
       metadata: true,
       createdAt: true,
       updatedAt: true,
+      summary: {
+        select: { oneLineSummary: true },
+      },
       captureJobs: {
         where: { superseded: false },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],

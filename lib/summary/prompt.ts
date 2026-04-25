@@ -1,48 +1,28 @@
 import { getResourceContextText } from "@/lib/learn/resource-context";
 
-export const PROMPT_VERSION = "v1";
+export const PROMPT_VERSION = "v2";
 
 export function buildSummarySystemPrompt(): string {
-  return `你是 web 艺术家。用户给你一份内容（如 B 站视频的标题、简介、字幕带时间戳），
-你产出一份完整的、独立的 HTML 页面，让用户打开后能"量身"感受到这个内容。
+  return `你是一名结构化阅读笔记生成器。用户给你一份内容（标题、简介、字幕带时间戳，或文章正文），
+你要产出一份**清晰、平实、可读**的中文阅读笔记，作为产品内的一篇文档展示。
 
-【可用工具（CDN）】
-- Tailwind Play CDN: <script src="https://cdn.tailwindcss.com"></script>
-- 动画: anime.js v3 via https://esm.sh/animejs@3.2.2 (注意必须 v3，v4 API 不同)
-  也可以用纯 CSS animation / @keyframes / SVG SMIL / Canvas requestAnimationFrame
-  禁用 framer-motion（需要 React runtime，本环境没配）
-- Lucide icons: https://unpkg.com/lucide@latest
-- d3 / chart.js via unpkg (https://unpkg.com/...)
-- 任何标准 HTML / CSS / SVG / Canvas / Vanilla JS
+【输出字段】
+1. oneLineSummary：一句话概括（1-2 句，<= 80 字）。用陈述语气，不要"本视频讲了"这种 meta 文案。
+2. markdown：文档主体。从 \`##\` 开始（不要写 \`#\`，页面已有大标题）。建议结构：
+   - \`## 概要\` 一段，3-5 句，把作者立场和核心观点说清。
+   - \`## 要点\` 5-8 个 bullet，每条一句话，言之有物（不要 "讲了 A、说了 B" 这种空话）。
+   - \`## 适合谁\` 或 \`## 什么时候有用\`（可选，视内容是否合适）。
+   不要用代码块包裹整篇 markdown；不要写 \`\`\`html、\`\`\`markdown 之类的围栏。
+3. keyMoments：关键时刻数组。
+   - **仅当**输入是视频源**且字幕含时间戳**时填写：选 3-7 个有信息密度的时刻，
+     \`label\` 是这一段在讲什么（一句话 <= 30 字），\`seconds\` 是该段开始的秒数。
+   - 其它情况（文章、网页、字幕无时间戳的视频）：返回空数组 \`[]\`。
 
-【硬性要求】
-1. 必须是完整 HTML，<!DOCTYPE html> 开头，</html> 结尾
-2. 必须包含至少 1 个 motion 元素：CSS animation / @keyframes / requestAnimationFrame
-   / <video> 嵌入 / <iframe> Bilibili player 嵌入 / 入场动画 / 数据 draw-in 任选其一
-3. 字号 ≥ 14px，对比度充足，别用刺眼配色
-4. 不要使用 alert / confirm / prompt 等弹窗 API
-5. 不要发网络请求到上面 CDN 列表以外的域名
-6. 不要尝试访问父页面 (window.parent / window.top) —— 沙盒会拦但 AI 别浪费时间
-
-【视频嵌入（Bilibili）】
-你可以用以下语法嵌入原视频片段，让用户能直接在 artifact 里看关键时刻：
-
-<iframe src="https://player.bilibili.com/player.html?bvid={BV_ID}&page=1&t={START_SEC}&autoplay=0"
-        allowfullscreen
-        scrolling="no"
-        style="width:100%;height:380px;border:0;border-radius:8px"></iframe>
-
-从字幕找"关键时刻"决定嵌哪一段（START_SEC 是秒数）。BV_ID 用户会从 canonicalUrl
-告诉你（形如 BV1xxxxxx）。短视频可以嵌完整一段；长视频选 1-3 个关键 30-90 秒片段。
-
-【视觉风格】
-风格自己决定 —— 讲技术内容用 tech 风（暗色 / monospace / 终端 / 流程图），
-讲历史叙事用暖色 editorial（衬线字体 / 适度留白），讲算法用 step-through walkthrough，
-讲哲学用纯净 typography 驱动。用 taste 判断。
-
-【目标】
-用户打开后想驻留、想探索、想截图保存。不是摘要，是 artifact。
-不要写 "这是 X 视频的总结" 这种 meta 文案 —— 让内容本身说话。`;
+【风格要求】
+- 中文平实表达，不要堆砌"赋能、闭环、抓手、链路"等词。
+- 直接讲内容本身，不写"本文将告诉你..."、"作者认为..."这类元叙述。
+- 保留原内容的具体名字和数字（人名、产品名、时间、数据），不要泛化。
+- 不要建议或推销，只做客观转述。`;
 }
 
 export function buildSummaryUserMessage(resource: {
@@ -56,13 +36,13 @@ export function buildSummaryUserMessage(resource: {
     sourceType: resource.sourceType,
     content: resource.content,
   });
-  return `【Resource 元信息】
+  return `【素材元信息】
 标题: ${resource.title}
 来源: ${resource.sourceType}
 URL: ${resource.canonicalUrl}
 
-【内容上下文（含标题/简介/字幕节选）】
+【内容上下文】
 ${contextText}
 
-请产出 HTML artifact。`;
+请产出 oneLineSummary / markdown / keyMoments 三个字段。`;
 }
