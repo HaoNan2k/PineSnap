@@ -1,10 +1,9 @@
 (() => {
-  const root = globalThis.PineSnapBilibiliCapture;
-  const runtime = root.runtime;
+  const root = globalThis.PineSnapCapture;
   const registry = root.registry;
 
-  const ROOT_ID = "pinesnap-bilibili-capture-root";
-  const STYLE_ID = "pinesnap-bilibili-capture-style";
+  const ROOT_ID = "pinesnap-capture-root";
+  const STYLE_ID = "pinesnap-capture-style";
   let isRunning = false;
 
   function sendMessage(message) {
@@ -42,47 +41,20 @@
     }, 2500);
   }
 
-  /** 字幕失败且无法 fallback 到 ASR 时的提示（仅 MISSING_VIDEO_CONTEXT 属于此类）。 */
   function describeTerminalFailure(code) {
+    const codes = registry.ERROR_CODES;
     switch (code) {
-      case "MISSING_VIDEO_CONTEXT":
+      case codes.MISSING_VIDEO_CONTEXT:
         return "未能识别当前视频信息，请刷新页面后重试。";
+      case codes.NOT_AN_ARTICLE:
+        return "当前页面不是可采集的内容类型。";
+      case codes.EXTRACT_EMPTY:
+        return "正文内容为空，可能是 SPA 未渲染或反爬限制。";
+      case codes.EXTRACT_BLOCKED:
+        return "页面阻止了抽取（登录墙 / 付费墙）。";
       default:
         return "采集失败，请打开控制台查看详情。";
     }
-  }
-
-  /**
-   * 从 B 站 __playinfo__ 中提取 DASH 音频流 URL 作为 mediaCandidates。
-   * 返回 [{kind, url, mimeType, bitrateKbps}] 或空数组。
-   */
-  function extractMediaCandidates(playinfo) {
-    const audio =
-      playinfo?.data?.dash?.audio ||
-      playinfo?.result?.dash?.audio ||
-      [];
-    if (!Array.isArray(audio) || audio.length === 0) return [];
-
-    return audio
-      .filter((a) => typeof (a?.baseUrl || a?.base_url) === "string")
-      .map((a) => ({
-        kind: "audio",
-        url: a.baseUrl || a.base_url,
-        mimeType: a.mimeType || a.mime_type || "audio/mp4",
-        bitrateKbps:
-          typeof a.bandwidth === "number" ? Math.round(a.bandwidth / 1000) : undefined,
-      }));
-  }
-
-  /** 判断字幕提取失败码是否可以 fallback 到 ASR（无字幕但视频本身可识别）。 */
-  function canFallbackToAsr(code) {
-    return (
-      code === "NO_SUBTITLE_TRACK" ||
-      code === "SUBTITLE_TRACK_UNSTABLE" ||
-      code === "SUBTITLE_FETCH_FAILED" ||
-      code === "SUBTITLE_REQUIRES_LOGIN" ||
-      code === "MISSING_CID"
-    );
   }
 
   async function fetchJson(url, options) {
@@ -115,6 +87,31 @@
     return response?.config || { baseUrl: "", token: "" };
   }
 
+  /**
+   * Bilibili extractor 失败但可降级时，构造 ASR fallback 提交 payload。
+   * 其他场景失败直接 toast。
+   */
+  function maybeBuildAsrFallback(result) {
+    if (result.provider !== "bilibili_full_subtitle_v1") return null;
+    if (!registry.isFallbackable(result.code)) return null;
+    const meta = result.meta;
+    if (!meta?.videoId) return null;
+
+    const bilibili = root.extractors[result.provider];
+    if (!bilibili?._internals) return null;
+
+    return bilibili._internals.buildAsrFallbackPayload(
+      {
+        id: meta.videoId,
+        url: meta.videoUrl,
+        title: meta.videoTitle,
+        playinfo: meta.playinfo,
+      },
+      result.code,
+      [{ provider: result.provider, ok: false, code: result.code }]
+    );
+  }
+
   async function runCapture() {
     if (isRunning) return;
     isRunning = true;
@@ -127,50 +124,29 @@
         return;
       }
 
-      toast("正在采集...");
-      const video = runtime.getVideoContext();
+      toast("正在采集当前页...");
       const result = await registry.run({
-        video,
+        url: location.href,
+        document,
         fetchJson,
       });
 
       let payload;
       if (result.ok) {
-        // 字幕提取成功，带 artifact 提交（同步完成）
         payload = result.payload;
-      } else if (canFallbackToAsr(result.code)) {
-        // 字幕失败但可 fallback：提交 mediaCandidates，由 worker 做 ASR
-        console.info("[PineSnap capture] subtitle failed, falling back to ASR", {
-          code: result.code,
-          attempts: result.attempts,
-        });
-        const candidates = extractMediaCandidates(video.playinfo);
-        payload = {
-          version: 1,
-          metadata: {
-            platform: "bilibili",
-            id: video.id,
-            url: video.url,
-            title: video.title || undefined,
-            captureDiagnostics: {
-              subtitleFailCode: result.code,
-              attempts: result.attempts,
-              asrFallback: true,
-              mediaCandidateCount: candidates.length,
-            },
-          },
-          content: {},
-          mediaCandidates: candidates,
-          accessContext: {
-            referer: "https://www.bilibili.com/",
-            userAgent: navigator.userAgent,
-          },
-        };
       } else {
-        // 无法恢复的错误（如 MISSING_VIDEO_CONTEXT）
-        console.warn("[PineSnap capture] terminal failure", result.attempts);
-        toast(describeTerminalFailure(result.code));
-        return;
+        const fallback = maybeBuildAsrFallback(result);
+        if (fallback) {
+          console.info("[PineSnap capture] subtitle failed, falling back to ASR", {
+            code: result.code,
+            provider: result.provider,
+          });
+          payload = fallback;
+        } else {
+          console.warn("[PineSnap capture] terminal failure", result);
+          toast(describeTerminalFailure(result.code));
+          return;
+        }
       }
 
       toast("正在发送到 PineSnap...");
@@ -191,8 +167,7 @@
         resourceId: upload.body?.resourceId,
         jobId: upload.body?.jobId,
         status: upload.body?.status,
-        provider: result.ok ? result.provider : "asr_fallback",
-        attempts: result.attempts,
+        provider: result.provider,
       });
     } catch (error) {
       console.error("[PineSnap capture] unexpected failure", error);
@@ -235,16 +210,13 @@
           user-select: none;
           transition: transform 0.25s ease;
         }
-
         #${ROOT_ID}:hover {
           transform: translateY(-50%) translateX(4px);
         }
-
         #${ROOT_ID}:focus-visible {
           outline: 2px solid rgba(0, 0, 0, 0.35);
           outline-offset: 2px;
         }
-
         #${ROOT_ID} .pinesnap-tab-layer {
           width: 42px;
           height: 48px;
@@ -258,7 +230,6 @@
           border-left: none;
           backdrop-filter: blur(4px);
         }
-
         #${ROOT_ID} .pinesnap-logo-layer {
           width: 32px;
           height: 32px;

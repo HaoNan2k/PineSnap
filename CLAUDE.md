@@ -129,3 +129,6 @@ Key routing rules:
 
 - typecheck: tsc --noEmit
 - lint: eslint .
+- test: pnpm test（vitest + jsdom，覆盖 `__tests__/**/*.test.ts`）
+- test:watch: pnpm test:watch
+- build:extension: pnpm build:extension（esbuild bundle Defuddle 到 `extensions/chrome-capture/dist/`）
