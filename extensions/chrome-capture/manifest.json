@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PineSnap Bilibili Capture",
-  "version": "0.1.0",
-  "description": "Capture Bilibili subtitles and send them to PineSnap.",
+  "name": "PineSnap Capture",
+  "version": "0.2.0",
+  "description": "Capture web articles, video subtitles and other content into PineSnap.",
   "permissions": ["storage", "identity"],
   "host_permissions": [
     "https://*/*",
@@ -14,9 +14,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.bilibili.com/video/*"],
+      "matches": ["<all_urls>"],
       "js": [
         "shared/runtime.js",
+        "shared/extractors/lib/dom-cleanup.js",
         "shared/extractors/bilibili-full-subtitle.js",
         "shared/extractor-registry.js",
         "content.js"
