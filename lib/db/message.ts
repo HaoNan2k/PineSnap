@@ -6,7 +6,8 @@ export async function createMessage(
   conversationId: string,
   role: Role,
   parts: ChatPart[],
-  clientMessageId?: string
+  clientMessageId?: string,
+  explicitId?: string
 ) {
   if (clientMessageId) {
     // Idempotent for user messages (and any caller-provided key):
@@ -18,6 +19,7 @@ export async function createMessage(
     try {
       return await prisma.message.create({
         data: {
+          ...(explicitId ? { id: explicitId } : {}),
           conversationId,
           role,
           clientMessageId,
@@ -35,9 +37,10 @@ export async function createMessage(
 
   return prisma.message.create({
     data: {
+      ...(explicitId ? { id: explicitId } : {}),
       conversationId,
       role,
-      parts: parts as unknown as Prisma.InputJsonValue, // Safe cast to Json compatible type
+      parts: parts as unknown as Prisma.InputJsonValue,
     },
   });
 }

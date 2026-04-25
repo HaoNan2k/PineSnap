@@ -54,9 +54,13 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
               if (code === "UNAUTHORIZED" || code === "FORBIDDEN") {
                 return false;
               }
+              // Also catch raw HTTP 401/403 from proxy (non-tRPC format)
+              if (isObject(error) && "status" in error && (error.status === 401 || error.status === 403)) {
+                return false;
+              }
               return failureCount < 3;
             },
-            staleTime: 5000,
+            staleTime: 60_000,
             refetchOnWindowFocus: false,
           },
         },
