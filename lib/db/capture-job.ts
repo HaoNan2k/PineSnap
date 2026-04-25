@@ -181,7 +181,10 @@ export async function requeueCaptureJob(args: {
 export async function claimPendingCaptureJobs(args: {
   limit: number;
   sourceType?: CaptureSourceType;
+  /** 单值；与 jobTypes 二选一 */
   jobType?: CaptureJobType;
+  /** 多值白名单；worker dispatcher 用，只领自己注册了 handler 的 jobType */
+  jobTypes?: CaptureJobType[];
 }) {
   const limit = Math.max(1, Math.min(args.limit, 50));
   const now = new Date();
@@ -189,8 +192,15 @@ export async function claimPendingCaptureJobs(args: {
     const sourceTypeFilter = args.sourceType
       ? Prisma.sql`AND "sourceType" = ${args.sourceType}::"CaptureSourceType"`
       : Prisma.empty;
-    const jobTypeFilter = args.jobType
-      ? Prisma.sql`AND "jobType" = ${args.jobType}::"CaptureJobType"`
+    const jobTypesArray = args.jobTypes && args.jobTypes.length > 0
+      ? args.jobTypes
+      : args.jobType
+        ? [args.jobType]
+        : null;
+    const jobTypeFilter = jobTypesArray
+      ? Prisma.sql`AND "jobType" IN (${Prisma.join(
+          jobTypesArray.map((t) => Prisma.sql`${t}::"CaptureJobType"`)
+        )})`
       : Prisma.empty;
 
     const lockedRows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`

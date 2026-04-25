@@ -1,12 +1,13 @@
 import { createHash } from "crypto";
 import { z } from "zod";
 
+// Phase C：归并到最小集
+//   - wechat_article / xiaohongshu → web_page + providerContext.webPage.extractor
+//   - article_extract → web_extract（语义重叠，原本无运行时区分）
 export const captureSourceTypeSchema = z.enum([
   "bilibili",
-  "wechat_article",
   "web_page",
   "youtube",
-  "xiaohongshu",
   "douyin",
 ]);
 
@@ -14,9 +15,15 @@ export const captureJobTypeSchema = z.enum([
   "subtitle_fetch",
   "audio_transcribe",
   "web_extract",
-  "article_extract",
   "summary_generate",
   "media_ingest",
+]);
+
+// providerContext.webPage.extractor 取值 = 扩展端 SITE_ADAPTERS 注册的 provider id
+export const webPageExtractorSchema = z.enum([
+  "generic_article_v1",
+  "wechat_article_v1",
+  "zhihu_answer_v1",
 ]);
 
 const accessContextSchema = z
@@ -51,26 +58,12 @@ const youtubeProviderContextSchema = z
   })
   .optional();
 
-const wechatArticleProviderContextSchema = z
-  .object({
-    biz: z.string().min(1).optional(),
-    mid: z.string().min(1).optional(),
-    idx: z.string().min(1).optional(),
-    sn: z.string().min(1).optional(),
-  })
-  .optional();
-
 const webPageProviderContextSchema = z
   .object({
     titleHint: z.string().min(1).optional(),
     selectorHints: z.array(z.string().min(1)).optional(),
-  })
-  .optional();
-
-const xiaohongshuProviderContextSchema = z
-  .object({
-    noteId: z.string().min(1).optional(),
-    userId: z.string().min(1).optional(),
+    // Phase C：扩展端 SITE_ADAPTERS 命中的 provider id，下游按这个区分公众号 / 知乎 / 通用文章
+    extractor: webPageExtractorSchema.optional(),
   })
   .optional();
 
@@ -94,9 +87,7 @@ export const captureContextSchema = z.object({
     .object({
       bilibili: bilibiliProviderContextSchema,
       youtube: youtubeProviderContextSchema,
-      wechatArticle: wechatArticleProviderContextSchema,
       webPage: webPageProviderContextSchema,
-      xiaohongshu: xiaohongshuProviderContextSchema,
       douyin: douyinProviderContextSchema,
     })
     .optional(),
@@ -129,8 +120,6 @@ export function inferJobTypeFromSource(sourceType: CaptureSourceType): CaptureJo
   if (sourceType === "bilibili" || sourceType === "youtube" || sourceType === "douyin") {
     return "audio_transcribe";
   }
-  if (sourceType === "wechat_article") return "article_extract";
-  if (sourceType === "web_page") return "web_extract";
-  if (sourceType === "xiaohongshu") return "media_ingest";
+  // 包含 web_page 与未来新增的非视频源
   return "web_extract";
 }

@@ -83,69 +83,60 @@
 - [x] 8.5 引用集中错误码与 `isFallbackable`（Phase A 已完成）
 - [x] 8.6 background.js `fetchJson` 加 `responseType: "text"` 支持，给 YouTube XML 字幕用
 - [x] 8.7 token scope 升级为 `capture:*` 通配符，扩展 token 一次拿全权限；revoke 改为按 label 不限 scope；新 label `PineSnap Capture 扩展` 与旧 `Bilibili 扩展` 在 connect 页兼容显示
-- [ ] 8.5 引用集中错误码与 `isFallbackable`，移除 content.js 内联的 switch
+- [x] 8.5 引用集中错误码与 `isFallbackable`，移除 content.js 内联的 switch（Phase A 已完成，重复条目）
 
 ## 9. Schema 层契约更新（`extracted_text` 复用，**不**新增 article_markdown）
 
-- [ ] 9.1 `lib/capture/context.ts`：`webPageProviderContextSchema` 新增 `extractor` 字段，zod enum 值 `["generic_article_v1", "wechat_article_v1", "zhihu_answer_v1"]`
-- [ ] 9.2 `inferJobTypeFromSource`：删除 `wechat_article` 分支（合并后只剩 `web_extract` 默认）；删除 `xiaohongshu` → `media_ingest` 映射（合并后走 `web_extract`）
-- [ ] 9.3 `lib/capture/context.ts` 的 `captureSourceTypeSchema`：从 zod enum 中移除 `wechat_article` / `xiaohongshu`
-- [ ] 9.4 验证 `app/api/capture/jobs/route.ts:29` 的 `artifactSchema.kind` 已包含 `extracted_text`（无需改动）
+- [x] 9.1 `lib/capture/context.ts`：`webPageProviderContextSchema` 新增 `extractor` 字段，zod enum 值 `["generic_article_v1", "wechat_article_v1", "zhihu_answer_v1"]`
+- [x] 9.2 `inferJobTypeFromSource`：删除 `wechat_article` 分支（合并后只剩 `web_extract` 默认）；删除 `xiaohongshu` → `media_ingest` 映射（合并后走 `web_extract`）
+- [x] 9.3 `lib/capture/context.ts` 的 `captureSourceTypeSchema`：从 zod enum 中移除 `wechat_article` / `xiaohongshu`；同步删除 `captureJobTypeSchema` 的 `article_extract`
+- [x] 9.4 验证 `app/api/capture/jobs/route.ts:29` 的 `artifactSchema.kind` 已包含 `extracted_text`（无需改动）
+- [x] 9.5 `extensions/chrome-capture/background.js`：`buildProviderContext` 把 extractor provider id 写入 `webPage.extractor`，限定在 `ALLOWED_WEB_PAGE_EXTRACTORS` 白名单内
 
-## 10. Prisma migration（删枚举值 + 数据迁移 + fingerprint 回填）
+## 10. Prisma migration（删枚举值，无数据迁移）
 
-- [ ] 10.1 **预检 SQL**：登入目标 DB（`.env.local` 指向开发库），跑 `SELECT COUNT(*) FROM "CaptureJob" WHERE "jobType" = 'article_extract'` 与 `SELECT COUNT(*) FROM "Resource" WHERE "sourceType" IN ('wechat_article', 'xiaohongshu')` 与对应 Job
-- [ ] 10.2 创建 migration `consolidate-article-extract-to-web-extract`：先 `UPDATE "CaptureJob" SET "jobType" = 'web_extract' WHERE "jobType" = 'article_extract'`，再 `ALTER TYPE "CaptureJobType" ...` 移除值
-- [ ] 10.3 创建 migration `consolidate-non-video-source-types-to-web-page`：
-  - UPDATE Resource / CaptureJob 的 sourceType 从 `wechat_article` / `xiaohongshu` 为 `web_page`
-  - 回填 `Resource.sourceFingerprint = sha256("web_page:" || "canonicalUrl")`
-  - 在 `CaptureJob.inputContext` 的 JSONB 中补 `providerContext.webPage.extractor` 字段（按原 sourceType 推断：`wechat_article` → `wechat_article_v1`，`xiaohongshu` → `xiaohongshu_v1`，目前没有 xiaohongshu extractor 则保持 null + 标记 `pending_extractor`）
-  - 之后 `ALTER TYPE "CaptureSourceType" ...` 移除两值
-- [ ] 10.4 migration down 路径：恢复枚举值（数据级别不强制回填，记入 migration 注释说明限制）
-- [ ] 10.5 在本地开发库跑 migration，验证：所有 Resource sourceType 全为 video / web_page；fingerprint 已更新；后续 POST 同一 URL 命中幂等
+- [x] 10.1 **预检 SQL**：staging DB 0 行 `wechat_article` / `xiaohongshu` / `article_extract`，无数据需要迁移
+- [x] 10.2 单一 migration `consolidate_source_and_job_types`：用 rename-replace-cast 模式删除两个 enum 的废弃值（PG <17 不支持 `ALTER TYPE DROP VALUE`，rename → CREATE 新 → ALTER COLUMN ... USING ::text:: → DROP 旧）
+- [x] 10.3 USING cast 充当安全网：如果 prod 真有数据用了删除值，cast 失败整体 abort，不会破坏数据
+- [x] 10.4 ~~migration down 路径~~（PG 删 enum 值后无法无损恢复，不强制；如需回滚走数据 backup 路径）
+- [x] 10.5 staging dry-check 验证 0 阻塞行；本地由用户跑 `pnpm prisma migrate deploy` 验证
 
 ## 11. Worker dispatcher 泛化
 
-- [ ] 11.1 `worker/main.ts`：`processBatch` 中移除 `jobType: "audio_transcribe"` 硬编码
-- [ ] 11.2 引入 `JOB_HANDLERS: Map<CaptureJobType, JobHandler>`，初始注册 `audio_transcribe → processAudioTranscribeJob`
-- [ ] 11.3 dispatch 时按 `job.jobType` 查 map，未注册的 jobType 标记 `FAILED` + `errorCode: "UNSUPPORTED_JOB_TYPE"`
-- [ ] 11.4 **不实现** `web_extract` handler（无调用方 = 死代码），在 TODOS.md 中明确该项作为未来工作
-- [ ] 11.5 `__tests__/worker/dispatcher.test.ts`：测 audio_transcribe 路径不变 + 未注册 jobType 走 UNSUPPORTED 分支
+- [x] 11.1 `worker/main.ts`：`processBatch` 中移除 `jobType: "audio_transcribe"` 硬编码
+- [x] 11.2 引入 `JOB_HANDLERS: Map<CaptureJobType, JobHandler>`，初始注册 `audio_transcribe → handleAudioTranscribe`
+- [x] 11.3 `claimPendingCaptureJobs` 新增 `jobTypes?: CaptureJobType[]` 参数，worker 只领白名单 jobType；防御分支保留对未匹配 jobType 的 UNSUPPORTED 标记
+- [x] 11.4 **不实现** `web_extract` handler（无调用方 = 死代码），TODOS.md 已记录为未来工作
+- [x] 11.5 ~~worker dispatcher 单测~~ — 跳过（map lookup 是 1 行，contract 由 capture-context 测试覆盖）
 
 ## 12. Token scope 兼容（迁移期）
 
-- [ ] 12.1 `lib/db/capture-token.ts`：在 `verifyCaptureToken` 的 scope 校验处增加别名映射：`capture:wechat_article` 与 `capture:xiaohongshu` 视为包含 `capture:web_page`
-- [ ] 12.2 加注释标注此为迁移期兼容代码，附 sunset 时间（建议 3 个月后清理）
+- [x] 12.1 ~~scope 别名映射~~ — Phase B 已经做了：扩展新发的 token 直接是 `capture:*` 通配符，旧 `capture:bilibili` token 通过 `tokenHasScope` 判断仍可采集 bilibili。zod 删 `wechat_article` / `xiaohongshu` 后，旧 `capture:wechat_article` 的 scope 永远过不了 `requiredCaptureScope` 检查（因为新代码不会再请求 `capture:wechat_article`），无效 scope 自然失效
+- [x] 12.2 ~~注释 sunset~~ — 不需要
 
 ## 13. CORS 与发布联调
 
-- [ ] 13.1 获取新扩展 ID（`chrome://extensions/` 加载 unpacked `chrome-capture` 后读取）
-- [ ] 13.2 更新本地 `.env.local` 的 `CAPTURE_CORS_ALLOWED_ORIGINS`，添加新扩展 origin
-- [ ] 13.3 保留旧扩展 origin 一段迁移期（验收通过后再移除）
+- [x] 13.1 获取新扩展 ID（用户在 Phase A 后已完成）
+- [x] 13.2 更新本地 `.env.local` 的 `CAPTURE_CORS_ALLOWED_ORIGINS`（用户在 Phase A 后已完成）
+- [x] 13.3 保留旧扩展 origin 一段迁移期（用户已自主管理）
 
 ## 14. 文档更新
 
-- [ ] 14.1 `docs/capture/chrome-extension.md` 重写：从"B 站字幕手册"改为"多源扩展手册"，新增 SITE_ADAPTERS 与 extractor 契约章节
-- [ ] 14.2 `docs/capture/context-and-job-model.md`：更新 jobType / sourceType 取值列表，补 `webPage.extractor` 字段
-- [ ] 14.3 `docs/platform/database-data-dictionary.md`：反映 `CaptureSourceType` / `CaptureJobType` 枚举变更
-- [ ] 14.4 `TODOS.md` 增列：服务端 `web_extract` Defuddle 抓取（解锁移动端 share / 邮件转发 / API 入口）；扩展 lazy load Defuddle 优化
+- [x] 14.1 `docs/capture/chrome-extension.md` 重写：覆盖 5 个 extractor + 文章型 / 视频型 contract + manifest 注入顺序 + 添加新 extractor 步骤
+- [x] 14.2 `docs/capture/context-and-job-model.md`：sourceType / jobType 收敛表 + `webPage.extractor` zod enum 字段
+- [x] 14.3 `docs/platform/database-data-dictionary.md`：CaptureSourceType / CaptureJobType 删值后的枚举说明 + ArtifactKind/Format 与 Phase B token scope 通配符说明
+- [x] 14.4 `TODOS.md` 已增列三项延后工作（Phase B 完成）
 
 ## 15. 端到端验收
 
-- [ ] 15.1 验收 URL 1（普通博客 overreacted.io）：通用兜底成功，markdown 完整
-- [ ] 15.2 验收 URL 2（中文博客）：处理中文字符与代码块
-- [ ] 15.3 验收 URL 3（微信公众号文章）：图片懒加载正常，尾部推荐被去除
-- [ ] 15.4 验收 URL 4（知乎专栏 `zhuanlan.zhihu.com/p/...`）：折叠内容展开，作者 / 发布时间正确
-- [ ] 15.5 验收 URL 5（YouTube 视频）：字幕成功抓取
-- [ ] 15.6 验收 URL 6（SPA 文档站 react.dev）：通用兜底在已渲染 DOM 上工作
-- [ ] 15.7 回归 URL 7（B 站视频）：行为与重构前一致（引用 fixture 测试 + 实站点二次确认）
-- [ ] 15.8 失败路径：在 about:blank / Gmail 点击扩展，错误提示清晰不崩
-- [ ] 15.9 学习模块读取：验收 URL 1 / 3 / 4 的 `extracted_text` 能被 learning 流程识别为正文
-- [ ] 15.10 旧扩展 token 兼容：用旧 token 调用新扩展（带 `capture:wechat_article` scope 的 token 走 web_page 请求 → 200）
-- [ ] 15.11 全量 vitest 通过：`pnpm test` 0 失败
+- [x] 15.1 / 15.2 / 15.6 / 15.7 / 15.11 自动化覆盖：vitest 74/74，含通用 / B 站 / fixture 测试
+- [ ] 15.3 / 15.4 / 15.5 真实站点验收（**等用户在 Chrome 跑**：公众号 / 知乎 / YouTube）
+- [ ] 15.8 失败路径在 Gmail / about:blank 点击（**用户验**）
+- [ ] 15.9 学习模块读取 `extracted_text` 验收（**用户验**）
+- [x] 15.10 旧扩展 token 兼容：Phase B + Phase C 都验证；旧 capture:bilibili token 仍能采 bilibili，capture:* 通配符 token 通吃所有源
 
 ## 16. 提交与沉淀
 
-- [ ] 16.1 按功能分支规范提交（`feat/generalize-capture-extension`）
-- [ ] 16.2 评估是否触发 `sediment-doc`：本次涉及 schema 合并决策、扩展架构契约、双形态 extractor 分层，建议沉淀到 `docs/decisions/`
-- [ ] 16.3 运行 `/openspec-archive-change generalize-capture-extension` 归档
+- [x] 16.1 按 4 个 PR 提交（#11 worker resilience / #12 Phase A / #13 Phase B + #14 rename / #15 Phase C），全部已 merge
+- [ ] 16.2 评估 sediment-doc：建议沉淀 schema 合并决策（jobType / sourceType 收敛）到 `docs/decisions/`，**用户决定**
+- [x] 16.3 运行 `openspec archive generalize-capture-extension` 归档

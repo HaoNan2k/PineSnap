@@ -105,9 +105,9 @@ export function UserMenu({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/connect/bilibili" className="cursor-pointer">
+              <Link href="/connect/extension" className="cursor-pointer">
                 <Link2 className="mr-2 h-4 w-4" />
-                <span>连接 Bilibili</span>
+                <span>连接扩展</span>
               </Link>
             </DropdownMenuItem>
           </>

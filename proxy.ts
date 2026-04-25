@@ -40,7 +40,8 @@ export async function proxy(request: NextRequest) {
     "/chat/c/",
     "/sources",
     "/learn",
-    "/connect/bilibili",
+    "/connect/extension",
+    "/connect/bilibili", // 旧路径兼容（中间件会重定向到新路径，仍需鉴权）
     "/api/trpc/",
     "/api/learn/",
     // "/api/trpc/message", // Add this when message router is ready
@@ -91,6 +92,7 @@ export const config = {
     "/chat/c/:path*",
     "/sources/:path*",
     "/learn/:path*",
+    "/connect/extension/:path*",
     "/connect/bilibili/:path*",
     "/api/trpc/:path*",
     "/api/learn/:path*",
