@@ -35,7 +35,7 @@ docs/
 - `database-data-dictionary.md` — 全库字段字典（所有模块共用真相）
 
 ### ops/ 产品操作
-- `connect-bilibili.md` — 用户端 B 站账号连接说明
+- `connect-extension.md` — 用户端 Chrome 扩展连接说明（多源：博客 / 公众号 / 知乎 / B 站 / YouTube）
 
 ### tooling/ 开发工具
 - `claude-code-plugin-skill-guide.md` — Claude Code 插件/Skill/命令参考

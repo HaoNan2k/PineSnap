@@ -47,7 +47,7 @@ export default async function Page() {
     for (const label of EXTENSION_LABELS) {
       await revokeCaptureTokensByLabel({ userId, label });
     }
-    revalidatePath("/connect/bilibili");
+    revalidatePath("/connect/extension");
   }
 
   return (
@@ -60,11 +60,12 @@ export default async function Page() {
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
               连接 Chrome 扩展，
               <br />
-              一键采集 B 站内容。
+              把任何网页存进 PineSnap。
             </h1>
             <p className="text-lg text-muted-foreground leading-relaxed max-w-3xl">
-              PineSnap 现已切换为扩展优先连接。你无需安装油猴脚本，也无需手动复制
-              Token。完成连接后，在 B 站页面点击“存入 PineSnap”即可入库。
+              PineSnap Capture 扩展支持博客、文档、微信公众号、知乎、B 站、YouTube
+              等多种来源。无需安装油猴脚本，也无需手动复制 Token。完成连接后，
+              在任意支持的页面点击“存入 PineSnap”即可入库。
             </p>
             <div className="space-y-5">
               <div className="flex gap-3 items-start">
@@ -74,7 +75,7 @@ export default async function Page() {
                 <div>
                   <p className="font-semibold">步骤 1：安装扩展</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    前往 Chrome Web Store 安装 PineSnap Bilibili Capture 扩展。
+                    前往 Chrome Web Store 安装 PineSnap Capture 扩展。
                   </p>
                 </div>
               </div>
@@ -94,9 +95,10 @@ export default async function Page() {
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="font-semibold">步骤 3：回到 B 站采集</p>
+                  <p className="font-semibold">步骤 3：在任意支持的页面采集</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    打开任意 B 站视频页并刷新，点击页面上的“存入 PineSnap”完成采集。
+                    打开博客、公众号文章、知乎答案、B 站 / YouTube 视频等页面，
+                    点击页面上的“存入 PineSnap”完成采集。
                   </p>
                 </div>
               </div>
@@ -184,7 +186,7 @@ export default async function Page() {
 
       <footer className="border-t py-8 mt-auto">
         <div className="container flex items-center justify-center gap-4 text-xs text-muted-foreground uppercase tracking-wider font-medium">
-          <span>PineSnap Bilibili Connector</span>
+          <span>PineSnap Capture</span>
           <span className="text-border">•</span>
           <span>V0.5.0</span>
           <span className="text-border">•</span>

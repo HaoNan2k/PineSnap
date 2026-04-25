@@ -2,7 +2,7 @@
 
 本文是 PineSnap「浏览器扩展采集鉴权」的长期真相文档，描述 `CaptureAuthCode`、`CaptureToken` 与采集写入链路的职责、关系和生命周期。
 
-> 适用范围：`/connect/bilibili/authorize`、`/api/capture/extension/*`、`/api/capture/jobs`。
+> 适用范围：`/connect/extension/authorize`、`/api/capture/extension/*`、`/api/capture/jobs`。
 
 ## 1. 先回答：`CaptureToken` 还有用吗？
 

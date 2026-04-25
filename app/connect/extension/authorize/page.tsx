@@ -28,7 +28,7 @@ function readFirst(
   return value ?? fallback;
 }
 
-export default async function BilibiliAuthorizePage({ searchParams }: PageProps) {
+export default async function ExtensionAuthorizePage({ searchParams }: PageProps) {
   const userId = await getAuthenticatedUserId();
   if (!userId) {
     const query = await searchParams;
@@ -37,7 +37,7 @@ export default async function BilibiliAuthorizePage({ searchParams }: PageProps)
       code_challenge: readFirst(query?.code_challenge),
       redirect_uri: readFirst(query?.redirect_uri),
     });
-    const returnUrl = `/connect/bilibili/authorize?${current.toString()}`;
+    const returnUrl = `/connect/extension/authorize?${current.toString()}`;
     redirect(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
   }
 
@@ -71,7 +71,8 @@ export default async function BilibiliAuthorizePage({ searchParams }: PageProps)
         <div className="rounded-2xl border bg-card p-8 shadow-sm">
           <h1 className="text-3xl font-bold tracking-tight">授权 Chrome 扩展</h1>
           <p className="mt-3 text-muted-foreground">
-            授权后，扩展可代表你的 PineSnap 账号将 B 站采集内容写入素材库。你可以随时在连接页撤销授权。
+            授权后，扩展可代表你的 PineSnap 账号将网页 / 公众号 / 知乎 / 视频字幕等
+            采集内容写入素材库。你可以随时在连接页撤销授权。
           </p>
 
           <form

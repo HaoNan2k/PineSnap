@@ -1,3 +1,5 @@
+// 历史遗留命名（早期只支持 B 站时定下）。重命名 STORAGE_KEY 会让所有用户的 token
+// 与 baseUrl 配置丢失（chrome.storage 按 key 隔离），需要带迁移代码。当前不动。
 const STORAGE_KEY = "pinesnap-bilibili-capture-config";
 const DEFAULT_BASE_URL = "http://localhost:3000";
 
@@ -73,7 +75,7 @@ async function startAuth(rawBaseUrl) {
   const codeVerifier = randomBase64Url(48);
   const codeChallenge = await sha256Base64Url(codeVerifier);
 
-  const authorizeUrl = new URL(`${baseUrl}/connect/bilibili/authorize`);
+  const authorizeUrl = new URL(`${baseUrl}/connect/extension/authorize`);
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("redirect_uri", redirectUri);
