@@ -31,6 +31,12 @@ function getSourceTypeFilter() {
   return parsed.data;
 }
 
+// 连续失败超过该阈值后主动 exit(1)，让 systemd 拉起新进程，
+// 避免长寿进程的 PrismaPg 内部连接池死掉后无法自愈。
+function getMaxConsecutiveErrors(): number {
+  return parsePositiveInt(process.env.WORKER_MAX_CONSECUTIVE_ERRORS, 5, 1);
+}
+
 function toFailure(error: unknown): { code: string; message: string } {
   const message = error instanceof Error ? error.message : String(error);
   if (/yt-dlp/i.test(message)) return { code: "ASR_AUDIO_EXTRACT_FAILED", message };
@@ -121,9 +127,10 @@ async function main() {
   const pollIntervalMs = getPollIntervalMs();
   const batchSize = getBatchSize();
   const sourceType = getSourceTypeFilter();
+  const maxConsecutiveErrors = getMaxConsecutiveErrors();
 
   console.log(
-    `[capture-worker] started: poll=${pollIntervalMs}ms batch=${batchSize} sourceType=${sourceType ?? "all"}`
+    `[capture-worker] started: poll=${pollIntervalMs}ms batch=${batchSize} sourceType=${sourceType ?? "all"} maxConsecutiveErrors=${maxConsecutiveErrors}`
   );
 
   process.on("SIGINT", () => {
@@ -133,14 +140,39 @@ async function main() {
     stopRequested = true;
   });
 
-  while (!stopRequested) {
-    const handled = await processBatch({
-      limit: batchSize,
-      sourceType,
-    });
+  let consecutiveErrors = 0;
 
-    if (handled === 0) {
-      await sleep(pollIntervalMs);
+  while (!stopRequested) {
+    try {
+      const handled = await processBatch({
+        limit: batchSize,
+        sourceType,
+      });
+
+      consecutiveErrors = 0;
+
+      if (handled === 0) {
+        await sleep(pollIntervalMs);
+      }
+    } catch (error) {
+      consecutiveErrors++;
+      const backoffMs = Math.min(pollIntervalMs * 2 ** consecutiveErrors, 5 * 60_000);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[capture-worker] poll error (${consecutiveErrors}x, backoff ${backoffMs}ms): ${message}`
+      );
+
+      if (consecutiveErrors >= maxConsecutiveErrors) {
+        // 连接池死锁等不可恢复状态：exit(1) 让 systemd 重新拉起，
+        // 比卡在 5 分钟 backoff 里无声死掉好得多。
+        console.error(
+          `[capture-worker] consecutive errors hit threshold (${maxConsecutiveErrors}), exiting for systemd auto-restart`
+        );
+        await prisma.$disconnect().catch(() => undefined);
+        process.exit(1);
+      }
+
+      await sleep(backoffMs);
     }
   }
 
@@ -151,7 +183,7 @@ main()
   .catch((error) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
     console.error(`[capture-worker] fatal: ${message}`);
-    process.exitCode = 1;
+    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();
