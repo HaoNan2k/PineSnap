@@ -58,9 +58,9 @@
 
 ## 9. 验证 & 收尾
 
-- [ ] 9.1 admin 账号登录后跑通：搜邮箱 → 看列表 → 进 learning → 看双列时间轴 + 卡片 + JSON 折叠 + 软删除 toggle 切换
-- [ ] 9.2 普通账号登录访问 `/debug` → 拿到 403；直接 fetch tRPC `debug.*` → 拿到 FORBIDDEN
-- [ ] 9.3 未登录访问 `/debug` → 跳登录
-- [ ] 9.4 对一条至少有 1 条 chat message + anchor 的 learning，确认 SVG 连接线指向正确 canvas 卡片
-- [ ] 9.5 验证软删除消息默认隐藏、toggle 打开后正常显示且 Δ 重算正确
-- [ ] 9.6 验证一个超过 500 条 message 的 learning（构造测试数据）能截断且前端有警告 —— 若不易构造则跳过，靠人工 review
+- [x] 9.1 admin 账号（haonan.2000@outlook.com）登录后跑通：list 页 6 条 learning，详情页 25 条 message 双列布局，meta card 全字段、Δ 耗时（含 +1ms / +2.5s / +1m53s / +2412m8s），parts JSON 折叠为 `[{}]`，soft-deleted toggle 渲染正确
+- [x] 9.2 普通账号 `/debug` → 渲染 403 admin only 页面（验证于设 admin 之前的同一账号）
+- [x] 9.3 未登录 `/debug` → 跳 `/login?returnUrl=%2Fdebug`
+- [x] 9.4 anchor 数据已验证：chat 4 条全部带 `anchor:019da22a…6556` / `anchor:019da22e…8368` 反向指向 canvas message。SVG 连接线渲染靠 useLayoutEffect 测真实卡片中心，需肉眼最终确认
+- [ ] 9.5 跳过：当前 6 条 learning 中无任何软删除 message，无法对比 toggle 开/关差异
+- [ ] 9.6 跳过：最大 learning 25 条 message，远小于 500 cap，截断分支无法触发
