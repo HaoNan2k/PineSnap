@@ -63,6 +63,25 @@
 
 说明：资源列表/跳转优先使用 `title + canonicalUrl + thumbnailUrl`。
 
+## ResourceSummary
+
+
+| 字段               | 类型         | 含义                                                       |
+| ---------------- | ---------- | -------------------------------------------------------- |
+| `id`             | `String`   | 总结主键                                                     |
+| `resourceId`     | `String`   | 关联资源 ID（**unique**，每个 resource 至多一份 summary）             |
+| `userId`         | `String`   | 所属用户                                                     |
+| `markdown`       | `String`   | 文档主体 markdown 文本（含 `## 概要` / `## 要点` 等小节）                |
+| `oneLineSummary` | `String`   | 一句话概括，列表卡片预览展示                                           |
+| `keyMoments`     | `Json`     | 关键时刻数组 `Array<{ label: string; seconds: number }>`，非视频源为空 |
+| `model`          | `String`   | 生成所用 LLM 模型 ID                                           |
+| `promptVersion`  | `String`   | prompt 版本号                                               |
+| `durationMs`     | `Int`      | 单次生成耗时                                                   |
+| `generatedAt`    | `DateTime` | 生成时间                                                     |
+
+
+说明：1:1 关系（`resourceId` unique）。重新生成走 upsert，覆盖旧记录，不保留多版本。`keyMoments` 仅视频类源（`bilibili` / `youtube` 等）非空；点击渲染时跳转原视频对应秒数。
+
 ## CaptureJob
 
 
