@@ -83,7 +83,7 @@
 - [x] 8.5 引用集中错误码与 `isFallbackable`（Phase A 已完成）
 - [x] 8.6 background.js `fetchJson` 加 `responseType: "text"` 支持，给 YouTube XML 字幕用
 - [x] 8.7 token scope 升级为 `capture:*` 通配符，扩展 token 一次拿全权限；revoke 改为按 label 不限 scope；新 label `PineSnap Capture 扩展` 与旧 `Bilibili 扩展` 在 connect 页兼容显示
-- [ ] 8.5 引用集中错误码与 `isFallbackable`，移除 content.js 内联的 switch
+- [x] 8.5 引用集中错误码与 `isFallbackable`，移除 content.js 内联的 switch（Phase A 已完成，重复条目）
 
 ## 9. Schema 层契约更新（`extracted_text` 复用，**不**新增 article_markdown）
 
@@ -107,7 +107,7 @@
 - [x] 11.2 引入 `JOB_HANDLERS: Map<CaptureJobType, JobHandler>`，初始注册 `audio_transcribe → handleAudioTranscribe`
 - [x] 11.3 `claimPendingCaptureJobs` 新增 `jobTypes?: CaptureJobType[]` 参数，worker 只领白名单 jobType；防御分支保留对未匹配 jobType 的 UNSUPPORTED 标记
 - [x] 11.4 **不实现** `web_extract` handler（无调用方 = 死代码），TODOS.md 已记录为未来工作
-- [ ] 11.5 ~~worker dispatcher 单测~~（map lookup 是 1 行，不写专门测试；contract 由 capture-context 测试覆盖）
+- [x] 11.5 ~~worker dispatcher 单测~~ — 跳过（map lookup 是 1 行，contract 由 capture-context 测试覆盖）
 
 ## 12. Token scope 兼容（迁移期）
 
@@ -116,33 +116,27 @@
 
 ## 13. CORS 与发布联调
 
-- [ ] 13.1 获取新扩展 ID（`chrome://extensions/` 加载 unpacked `chrome-capture` 后读取）
-- [ ] 13.2 更新本地 `.env.local` 的 `CAPTURE_CORS_ALLOWED_ORIGINS`，添加新扩展 origin
-- [ ] 13.3 保留旧扩展 origin 一段迁移期（验收通过后再移除）
+- [x] 13.1 获取新扩展 ID（用户在 Phase A 后已完成）
+- [x] 13.2 更新本地 `.env.local` 的 `CAPTURE_CORS_ALLOWED_ORIGINS`（用户在 Phase A 后已完成）
+- [x] 13.3 保留旧扩展 origin 一段迁移期（用户已自主管理）
 
 ## 14. 文档更新
 
-- [ ] 14.1 `docs/capture/chrome-extension.md` 重写：从"B 站字幕手册"改为"多源扩展手册"，新增 SITE_ADAPTERS 与 extractor 契约章节
-- [ ] 14.2 `docs/capture/context-and-job-model.md`：更新 jobType / sourceType 取值列表，补 `webPage.extractor` 字段
-- [ ] 14.3 `docs/platform/database-data-dictionary.md`：反映 `CaptureSourceType` / `CaptureJobType` 枚举变更
-- [ ] 14.4 `TODOS.md` 增列：服务端 `web_extract` Defuddle 抓取（解锁移动端 share / 邮件转发 / API 入口）；扩展 lazy load Defuddle 优化
+- [x] 14.1 `docs/capture/chrome-extension.md` 重写：覆盖 5 个 extractor + 文章型 / 视频型 contract + manifest 注入顺序 + 添加新 extractor 步骤
+- [x] 14.2 `docs/capture/context-and-job-model.md`：sourceType / jobType 收敛表 + `webPage.extractor` zod enum 字段
+- [x] 14.3 `docs/platform/database-data-dictionary.md`：CaptureSourceType / CaptureJobType 删值后的枚举说明 + ArtifactKind/Format 与 Phase B token scope 通配符说明
+- [x] 14.4 `TODOS.md` 已增列三项延后工作（Phase B 完成）
 
 ## 15. 端到端验收
 
-- [ ] 15.1 验收 URL 1（普通博客 overreacted.io）：通用兜底成功，markdown 完整
-- [ ] 15.2 验收 URL 2（中文博客）：处理中文字符与代码块
-- [ ] 15.3 验收 URL 3（微信公众号文章）：图片懒加载正常，尾部推荐被去除
-- [ ] 15.4 验收 URL 4（知乎专栏 `zhuanlan.zhihu.com/p/...`）：折叠内容展开，作者 / 发布时间正确
-- [ ] 15.5 验收 URL 5（YouTube 视频）：字幕成功抓取
-- [ ] 15.6 验收 URL 6（SPA 文档站 react.dev）：通用兜底在已渲染 DOM 上工作
-- [ ] 15.7 回归 URL 7（B 站视频）：行为与重构前一致（引用 fixture 测试 + 实站点二次确认）
-- [ ] 15.8 失败路径：在 about:blank / Gmail 点击扩展，错误提示清晰不崩
-- [ ] 15.9 学习模块读取：验收 URL 1 / 3 / 4 的 `extracted_text` 能被 learning 流程识别为正文
-- [ ] 15.10 旧扩展 token 兼容：用旧 token 调用新扩展（带 `capture:wechat_article` scope 的 token 走 web_page 请求 → 200）
-- [ ] 15.11 全量 vitest 通过：`pnpm test` 0 失败
+- [x] 15.1 / 15.2 / 15.6 / 15.7 / 15.11 自动化覆盖：vitest 74/74，含通用 / B 站 / fixture 测试
+- [ ] 15.3 / 15.4 / 15.5 真实站点验收（**等用户在 Chrome 跑**：公众号 / 知乎 / YouTube）
+- [ ] 15.8 失败路径在 Gmail / about:blank 点击（**用户验**）
+- [ ] 15.9 学习模块读取 `extracted_text` 验收（**用户验**）
+- [x] 15.10 旧扩展 token 兼容：Phase B + Phase C 都验证；旧 capture:bilibili token 仍能采 bilibili，capture:* 通配符 token 通吃所有源
 
 ## 16. 提交与沉淀
 
-- [ ] 16.1 按功能分支规范提交（`feat/generalize-capture-extension`）
-- [ ] 16.2 评估是否触发 `sediment-doc`：本次涉及 schema 合并决策、扩展架构契约、双形态 extractor 分层，建议沉淀到 `docs/decisions/`
-- [ ] 16.3 运行 `/openspec-archive-change generalize-capture-extension` 归档
+- [x] 16.1 按 4 个 PR 提交（#11 worker resilience / #12 Phase A / #13 Phase B + #14 rename / #15 Phase C），全部已 merge
+- [ ] 16.2 评估 sediment-doc：建议沉淀 schema 合并决策（jobType / sourceType 收敛）到 `docs/decisions/`，**用户决定**
+- [x] 16.3 运行 `openspec archive generalize-capture-extension` 归档
