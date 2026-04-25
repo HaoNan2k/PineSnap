@@ -50,6 +50,7 @@ docs/
 - `0002-canvas-conversation-recovery-strategy.md` — Canvas 学习会话的中断恢复策略
 - `0003-canvas-chat-architecture.md` — Canvas + Chat 架构重设计（Light Anchor）
 - `0004-live-session-message-id.md` — Live-session 时 canvas 消息 id 的一致性契约（server 预生成 UUIDv7 → stream start 回写 → DB 同 id）
+- `0005-resource-summary-as-document.md` — Resource Summary 从沉浸式 HTML artifact 转向产品内结构化文档（AI 输出从 generateText 切到 generateObject）
 
 ### performance/ 性能优化
 命名：`YYYY-MM-DD-领域-主题.md`。记录"问题 / 指标前后 / 方案 / 验证"。
