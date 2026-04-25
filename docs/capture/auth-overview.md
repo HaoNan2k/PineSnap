@@ -80,7 +80,7 @@
 - `scopes`：权限范围（数组）
 - `revokedAt`：撤销标记
 - `lastUsedAt`：成功鉴权后的最近使用时间（审计/排障）
-- `label`：发证来源标签（当前固定为 “Bilibili 扩展”，用于轮换策略）
+- `label`：发证来源标签。新版扩展使用 “PineSnap Capture 扩展”，历史 token 仍带有 “Bilibili 扩展”。撤销 / 列举时按 label 集合判断
 
 > 备注：扩展端需要保存 **明文 token**（在本地 storage），服务端永远不需要明文 token。
 
