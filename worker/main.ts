@@ -5,6 +5,7 @@ import { createCaptureArtifact } from "../lib/db/capture-artifact";
 import { claimPendingCaptureJobs, markCaptureJobStatus } from "../lib/db/capture-job";
 import { captureSourceTypeSchema } from "../lib/capture/context";
 import { prisma } from "../lib/prisma";
+import type { CaptureJobType } from "../generated/prisma/client";
 
 function parsePositiveInt(value: string | undefined, fallback: number, min = 1): number {
   if (!value) return fallback;
@@ -51,6 +52,61 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Job dispatcher
+// ─────────────────────────────────────────────────────────────────
+
+type ClaimedJob = Awaited<ReturnType<typeof claimPendingCaptureJobs>>[number];
+
+type JobHandler = (job: ClaimedJob) => Promise<void>;
+
+/**
+ * 处理 audio_transcribe job：跑 ASR + 写 artifact + 标 SUCCEEDED。
+ */
+async function handleAudioTranscribe(job: ClaimedJob): Promise<void> {
+  const processed = await processAudioTranscribeJob({ inputContext: job.inputContext });
+
+  await markCaptureJobStatus({
+    jobId: job.id,
+    status: "RUNNING",
+    stage: "PERSISTING_ARTIFACT",
+  });
+
+  await createCaptureArtifact({
+    jobId: job.id,
+    kind: "asr_transcript",
+    language: processed.language,
+    format: "cue_lines",
+    schemaVersion: processed.schemaVersion,
+    qualityScore: processed.qualityScore,
+    content: processed.content,
+    isPrimary: true,
+  });
+
+  await markCaptureJobStatus({
+    jobId: job.id,
+    status: "SUCCEEDED",
+    stage: "COMPLETED",
+    finishedAt: new Date(),
+  });
+}
+
+/**
+ * jobType → handler map. 新 handler 只需在此注册一行即可。
+ *
+ * 当前未注册：
+ *   - subtitle_fetch / web_extract：扩展端预抽时由 POST /api/capture/jobs 同步落库，
+ *     不进 worker 队列。未来若开放"仅 URL"提交（移动端 share / 邮件转发），
+ *     需要在此加 server-side fetch + Defuddle handler。
+ *   - article_extract：Phase C 中删除（合并到 web_extract）。
+ *   - summary_generate / media_ingest：尚未启用。
+ */
+const JOB_HANDLERS = new Map<CaptureJobType, JobHandler>([
+  ["audio_transcribe", handleAudioTranscribe],
+]);
+
+const SUPPORTED_JOB_TYPES: CaptureJobType[] = Array.from(JOB_HANDLERS.keys());
+
 async function processBatch(args: {
   limit: number;
   sourceType?: z.infer<typeof captureSourceTypeSchema>;
@@ -58,52 +114,33 @@ async function processBatch(args: {
   const jobs = await claimPendingCaptureJobs({
     limit: args.limit,
     sourceType: args.sourceType,
-    jobType: "audio_transcribe",
+    jobTypes: SUPPORTED_JOB_TYPES,
   });
 
   if (jobs.length === 0) return 0;
 
   for (const job of jobs) {
-    if (job.jobType !== "audio_transcribe") {
+    const handler = JOB_HANDLERS.get(job.jobType);
+    if (!handler) {
+      // 防御分支：claim 已按白名单过滤，理论上不会到这里。
+      // 真到了说明某个 race / 配置错乱，标记 FAILED 并明示。
       await markCaptureJobStatus({
         jobId: job.id,
         status: "FAILED",
         stage: "FAILED",
         errorCode: "UNSUPPORTED_JOB_TYPE",
-        errorMessage: `Unsupported jobType for worker: ${job.jobType}`,
+        errorMessage: `No handler registered for jobType: ${job.jobType}`,
         finishedAt: new Date(),
       });
+      console.error(
+        `[capture-worker] dispatched to unsupported jobType (defensive branch): ${job.id} ${job.jobType}`
+      );
       continue;
     }
 
     try {
-      const processed = await processAudioTranscribeJob({ inputContext: job.inputContext });
-
-      await markCaptureJobStatus({
-        jobId: job.id,
-        status: "RUNNING",
-        stage: "PERSISTING_ARTIFACT",
-      });
-
-      await createCaptureArtifact({
-        jobId: job.id,
-        kind: "asr_transcript",
-        language: processed.language,
-        format: "cue_lines",
-        schemaVersion: processed.schemaVersion,
-        qualityScore: processed.qualityScore,
-        content: processed.content,
-        isPrimary: true,
-      });
-
-      await markCaptureJobStatus({
-        jobId: job.id,
-        status: "SUCCEEDED",
-        stage: "COMPLETED",
-        finishedAt: new Date(),
-      });
-
-      console.log(`[capture-worker] job succeeded: ${job.id}`);
+      await handler(job);
+      console.log(`[capture-worker] job succeeded: ${job.id} (${job.jobType})`);
     } catch (error) {
       const failure = toFailure(error);
       await markCaptureJobStatus({
@@ -114,7 +151,9 @@ async function processBatch(args: {
         errorMessage: failure.message,
         finishedAt: new Date(),
       });
-      console.error(`[capture-worker] job failed: ${job.id} (${failure.code}) ${failure.message}`);
+      console.error(
+        `[capture-worker] job failed: ${job.id} (${job.jobType}) ${failure.code} ${failure.message}`
+      );
     }
   }
 
@@ -130,7 +169,9 @@ async function main() {
   const maxConsecutiveErrors = getMaxConsecutiveErrors();
 
   console.log(
-    `[capture-worker] started: poll=${pollIntervalMs}ms batch=${batchSize} sourceType=${sourceType ?? "all"} maxConsecutiveErrors=${maxConsecutiveErrors}`
+    `[capture-worker] started: poll=${pollIntervalMs}ms batch=${batchSize} sourceType=${
+      sourceType ?? "all"
+    } maxConsecutiveErrors=${maxConsecutiveErrors} handlers=[${SUPPORTED_JOB_TYPES.join(",")}]`
   );
 
   process.on("SIGINT", () => {

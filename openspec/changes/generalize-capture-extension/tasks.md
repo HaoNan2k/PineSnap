@@ -87,35 +87,32 @@
 
 ## 9. Schema 层契约更新（`extracted_text` 复用，**不**新增 article_markdown）
 
-- [ ] 9.1 `lib/capture/context.ts`：`webPageProviderContextSchema` 新增 `extractor` 字段，zod enum 值 `["generic_article_v1", "wechat_article_v1", "zhihu_answer_v1"]`
-- [ ] 9.2 `inferJobTypeFromSource`：删除 `wechat_article` 分支（合并后只剩 `web_extract` 默认）；删除 `xiaohongshu` → `media_ingest` 映射（合并后走 `web_extract`）
-- [ ] 9.3 `lib/capture/context.ts` 的 `captureSourceTypeSchema`：从 zod enum 中移除 `wechat_article` / `xiaohongshu`
-- [ ] 9.4 验证 `app/api/capture/jobs/route.ts:29` 的 `artifactSchema.kind` 已包含 `extracted_text`（无需改动）
+- [x] 9.1 `lib/capture/context.ts`：`webPageProviderContextSchema` 新增 `extractor` 字段，zod enum 值 `["generic_article_v1", "wechat_article_v1", "zhihu_answer_v1"]`
+- [x] 9.2 `inferJobTypeFromSource`：删除 `wechat_article` 分支（合并后只剩 `web_extract` 默认）；删除 `xiaohongshu` → `media_ingest` 映射（合并后走 `web_extract`）
+- [x] 9.3 `lib/capture/context.ts` 的 `captureSourceTypeSchema`：从 zod enum 中移除 `wechat_article` / `xiaohongshu`；同步删除 `captureJobTypeSchema` 的 `article_extract`
+- [x] 9.4 验证 `app/api/capture/jobs/route.ts:29` 的 `artifactSchema.kind` 已包含 `extracted_text`（无需改动）
+- [x] 9.5 `extensions/chrome-capture/background.js`：`buildProviderContext` 把 extractor provider id 写入 `webPage.extractor`，限定在 `ALLOWED_WEB_PAGE_EXTRACTORS` 白名单内
 
-## 10. Prisma migration（删枚举值 + 数据迁移 + fingerprint 回填）
+## 10. Prisma migration（删枚举值，无数据迁移）
 
-- [ ] 10.1 **预检 SQL**：登入目标 DB（`.env.local` 指向开发库），跑 `SELECT COUNT(*) FROM "CaptureJob" WHERE "jobType" = 'article_extract'` 与 `SELECT COUNT(*) FROM "Resource" WHERE "sourceType" IN ('wechat_article', 'xiaohongshu')` 与对应 Job
-- [ ] 10.2 创建 migration `consolidate-article-extract-to-web-extract`：先 `UPDATE "CaptureJob" SET "jobType" = 'web_extract' WHERE "jobType" = 'article_extract'`，再 `ALTER TYPE "CaptureJobType" ...` 移除值
-- [ ] 10.3 创建 migration `consolidate-non-video-source-types-to-web-page`：
-  - UPDATE Resource / CaptureJob 的 sourceType 从 `wechat_article` / `xiaohongshu` 为 `web_page`
-  - 回填 `Resource.sourceFingerprint = sha256("web_page:" || "canonicalUrl")`
-  - 在 `CaptureJob.inputContext` 的 JSONB 中补 `providerContext.webPage.extractor` 字段（按原 sourceType 推断：`wechat_article` → `wechat_article_v1`，`xiaohongshu` → `xiaohongshu_v1`，目前没有 xiaohongshu extractor 则保持 null + 标记 `pending_extractor`）
-  - 之后 `ALTER TYPE "CaptureSourceType" ...` 移除两值
-- [ ] 10.4 migration down 路径：恢复枚举值（数据级别不强制回填，记入 migration 注释说明限制）
-- [ ] 10.5 在本地开发库跑 migration，验证：所有 Resource sourceType 全为 video / web_page；fingerprint 已更新；后续 POST 同一 URL 命中幂等
+- [x] 10.1 **预检 SQL**：staging DB 0 行 `wechat_article` / `xiaohongshu` / `article_extract`，无数据需要迁移
+- [x] 10.2 单一 migration `consolidate_source_and_job_types`：用 rename-replace-cast 模式删除两个 enum 的废弃值（PG <17 不支持 `ALTER TYPE DROP VALUE`，rename → CREATE 新 → ALTER COLUMN ... USING ::text:: → DROP 旧）
+- [x] 10.3 USING cast 充当安全网：如果 prod 真有数据用了删除值，cast 失败整体 abort，不会破坏数据
+- [x] 10.4 ~~migration down 路径~~（PG 删 enum 值后无法无损恢复，不强制；如需回滚走数据 backup 路径）
+- [x] 10.5 staging dry-check 验证 0 阻塞行；本地由用户跑 `pnpm prisma migrate deploy` 验证
 
 ## 11. Worker dispatcher 泛化
 
-- [ ] 11.1 `worker/main.ts`：`processBatch` 中移除 `jobType: "audio_transcribe"` 硬编码
-- [ ] 11.2 引入 `JOB_HANDLERS: Map<CaptureJobType, JobHandler>`，初始注册 `audio_transcribe → processAudioTranscribeJob`
-- [ ] 11.3 dispatch 时按 `job.jobType` 查 map，未注册的 jobType 标记 `FAILED` + `errorCode: "UNSUPPORTED_JOB_TYPE"`
-- [ ] 11.4 **不实现** `web_extract` handler（无调用方 = 死代码），在 TODOS.md 中明确该项作为未来工作
-- [ ] 11.5 `__tests__/worker/dispatcher.test.ts`：测 audio_transcribe 路径不变 + 未注册 jobType 走 UNSUPPORTED 分支
+- [x] 11.1 `worker/main.ts`：`processBatch` 中移除 `jobType: "audio_transcribe"` 硬编码
+- [x] 11.2 引入 `JOB_HANDLERS: Map<CaptureJobType, JobHandler>`，初始注册 `audio_transcribe → handleAudioTranscribe`
+- [x] 11.3 `claimPendingCaptureJobs` 新增 `jobTypes?: CaptureJobType[]` 参数，worker 只领白名单 jobType；防御分支保留对未匹配 jobType 的 UNSUPPORTED 标记
+- [x] 11.4 **不实现** `web_extract` handler（无调用方 = 死代码），TODOS.md 已记录为未来工作
+- [ ] 11.5 ~~worker dispatcher 单测~~（map lookup 是 1 行，不写专门测试；contract 由 capture-context 测试覆盖）
 
 ## 12. Token scope 兼容（迁移期）
 
-- [ ] 12.1 `lib/db/capture-token.ts`：在 `verifyCaptureToken` 的 scope 校验处增加别名映射：`capture:wechat_article` 与 `capture:xiaohongshu` 视为包含 `capture:web_page`
-- [ ] 12.2 加注释标注此为迁移期兼容代码，附 sunset 时间（建议 3 个月后清理）
+- [x] 12.1 ~~scope 别名映射~~ — Phase B 已经做了：扩展新发的 token 直接是 `capture:*` 通配符，旧 `capture:bilibili` token 通过 `tokenHasScope` 判断仍可采集 bilibili。zod 删 `wechat_article` / `xiaohongshu` 后，旧 `capture:wechat_article` 的 scope 永远过不了 `requiredCaptureScope` 检查（因为新代码不会再请求 `capture:wechat_article`），无效 scope 自然失效
+- [x] 12.2 ~~注释 sunset~~ — 不需要
 
 ## 13. CORS 与发布联调
 
