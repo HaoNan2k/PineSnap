@@ -205,5 +205,24 @@ CAPTURE_CORS_ALLOWED_ORIGINS=chrome-extension://<扩展ID1>,chrome-extension://<
 4. 在 `shared/extractor-registry.js` 的 `SITE_ADAPTERS` 数组中按优先级插入 `provider` 名
 5. 文章型：把 `extractor` provider id 加到 `lib/capture/context.ts` 的 `webPageExtractorSchema` zod enum，以及 `extensions/chrome-capture/background.js` 的 `ALLOWED_WEB_PAGE_EXTRACTORS` 集合
 6. 写单测：`__tests__/extensions/chrome-capture/extractors/<site>.test.ts`，使用 fake Defuddle + mock DOM
+7. 加一个真实 HTML fixture：见下文"添加回归测试"
 
 DOM 清洗工具复用 `shared/extractors/lib/dom-cleanup.js`：`expandLazyImages` / `removeSelectors` / `stripTrackingParams` / `normalizeSections`。
+
+## 8. 添加回归测试（snapshot diff）
+
+通用兜底 extractor（generic-article）已建立 e2e 真实 fixture 回归基线；站点 extractor 在添加首个真实 fixture 时
+触发 site driver 落地。详见
+[`__tests__/extensions/chrome-capture/fixtures/README.md`](../../__tests__/extensions/chrome-capture/fixtures/README.md)
+与决策记录 [0007](../decisions/0007-capture-extractor-test-architecture.md)。
+
+短版工作流：
+
+1. 用 [SingleFile](https://github.com/gildas-lormeau/SingleFile) 抓页面（hydrated DOM、登录态、反爬都靠浏览器解决）
+2. 重命名为 `{category}--{scenario}.html`，移到 `__tests__/extensions/chrome-capture/fixtures/`
+3. 顶部加 frontmatter 注释：`<!-- {"url": "...", "capturedAt": "YYYY-MM-DD"} -->`
+4. `pnpm lint:fixtures` 确认无敏感词
+5. `pnpm test __tests__/extensions/chrome-capture/fixtures-driver.test.ts` 首次跑生成 baseline
+6. review `expected/{name}.md` 后 commit
+
+修复 extractor bug 时三条铁律：①fixture 必须先在旧代码上失败 ②永不 `innerHTML` 直接构造 DOM ③入仓前匿名化（详见 fixtures README）。

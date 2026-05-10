@@ -1,3 +1,14 @@
+/**
+ * 包装逻辑单元测试（mock Defuddle）。
+ *
+ * 这里只验证 generic-article extractor 的包装层：错误码分支、payload 形状、
+ * sourceHtml 截断、Defuddle 缺失时的降级。**不验证真实抽取质量**。
+ *
+ * 真实抽取质量由 `__tests__/extensions/chrome-capture/fixtures-driver.test.ts`
+ * 用真实 HTML fixture + 真 Defuddle 跑 snapshot diff 来覆盖。
+ *
+ * 决策依据：docs/decisions/0007-capture-extractor-test-architecture.md
+ */
 import { describe, it, expect, beforeEach } from "vitest";
 import { loadExtensionScript, resetCaptureGlobal } from "../test-utils";
 import type {} from "../types";
