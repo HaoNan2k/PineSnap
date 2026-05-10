@@ -10,6 +10,7 @@
     "postinstall": "prisma generate",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint:fixtures": "node scripts/lint-capture-fixtures.mjs",
     "build:extension": "node extensions/chrome-capture/build.mjs",
     "worker:run": "NODE_OPTIONS=--conditions=react-server tsx worker/main.ts"
   },
@@ -64,6 +65,8 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/mime-types": "^2.1.4",
     "@types/node": "^20",
     "@types/pg": "^8.16.0",
